@@ -76,3 +76,6 @@ Controlled By:  DaemonSet/kube-proxy
 
 Pod frontend не запускается, так как для контейнера не определены начальные переменные необходимые для запуска, что написано в логах и можно найти в исходном коде:  
 https://github.com/GoogleCloudPlatform/microservices-demo/blob/v0.2.3/kubernetes-manifests/frontend.yaml
+
+
+## Homework 2
