@@ -149,13 +149,14 @@ paymentservice-5f4bb9d75f-9tnlj   0/1     Terminating         0          9m21s
 paymentservice-5f4bb9d75f-9tnlj   0/1     Terminating         0          9m21s
 ```
 ### Probes
-Liveness - Жив ли контейнер или же нужно его перезапустить. Например приложение запущено, но зависло. 
-Readyness - Готов ли контейнер полностью к работе, можно ли на него роутить трафик.
-Startup - отменяет предыдущие два, до тех пор пока его проверка не пройдёт. Нужно, чтобы другие проверки не перезапустили контейнер до тех пор, пока приложение нормально не начнёт работу. Полезно для медленных приложений, БД и т.п.. 
+* Liveness - Жив ли контейнер или же нужно его перезапустить. Например приложение запущено, но зависло. 
+* Readyness - Готов ли контейнер полностью к работе, можно ли на него роутить трафик.
+* Startup - отменяет предыдущие два, до тех пор пока его проверка не пройдёт. Нужно, чтобы другие проверки не перезапустили контейнер до тех пор, пока приложение нормально не начнёт работу. Полезно для медленных приложений, БД и т.п.. 
 
 ### DaemonSet *
 
-При его применении на каждом физическом хосте создается по одному экземпляру pod, описанного в спецификации.
+A DaemonSet ensures that all (or some) Nodes run a copy of a Pod. As nodes are added to the cluster, Pods are added to them. As nodes are removed from the cluster, those Pods are garbage collected.
+
 Типичные кейсы использования DaemonSet:
 * Сетевые плагины
 * Утилиты для сбора и отправки логов (Fluent Bit, Fluentd, etc...)
@@ -175,6 +176,16 @@ Node exporter daemonset взят отсюда - https://github.com/bibinwilson/k
       - key: node-role.kubernetes.io/master
 ```
 https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/#writing-a-daemonset-spec
+
+### Other Info
+
+### Taints and Tolerations
+*Node affinity* is a property of Pods that attracts them to a set of nodes (either as a preference or a hard requirement). *Taints* are the opposite -- they allow a node to repel a set of pods.
+
+*Tolerations* are applied to pods, and allow (but do not require) the pods to schedule onto nodes with matching taints.
+
+#### Jobs
+A Job creates one or more Pods and will continue to retry execution of the Pods until a specified number of them successfully terminate.
 
 ## Homework 3 (Security)
 
