@@ -80,7 +80,7 @@ https://github.com/GoogleCloudPlatform/microservices-demo/blob/v0.2.3/kubernetes
 
 ## Homework 2 (Controllers)
 
-Неправильно в примере указан api для конфига minikube - должен быть `apiVersion: kind.x-k8s.io/v1alpha4`.
+Неправильно в примере указан api для конфига kind - должен быть `apiVersion: kind.x-k8s.io/v1alpha4`.
 
 Missing required field "selector" in io.k8s.api.apps.v1.ReplicaSetSpec
 В манифесте не хватало обязательного блока с селекотром по лейблам.
