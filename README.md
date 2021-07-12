@@ -1,7 +1,7 @@
 # Ivorlun_platform
 Ivorlun Platform repository
 
-## Homework 1
+## Homework 1 (Intro)
 
 ### Unhealthy controller-manager and scheduler
 
@@ -78,4 +78,103 @@ Pod frontend не запускается, так как для контейне�
 https://github.com/GoogleCloudPlatform/microservices-demo/blob/v0.2.3/kubernetes-manifests/frontend.yaml
 
 
-## Homework 2
+## Homework 2 (Controllers)
+
+Неправильно в примере указан api для конфига minikube - должен быть `apiVersion: kind.x-k8s.io/v1alpha4`.
+
+Missing required field "selector" in io.k8s.api.apps.v1.ReplicaSetSpec
+В манифесте не хватало обязательного блока с селекотром по лейблам.
+
+ReplicaSet (так же как и устаревший replication controller) не заменяет поды при обновлении шаблона автоматически.  
+
+Официальная документация:  
+https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#deleting-just-a-replicaset  
+```
+Once the original is deleted, you can create a new ReplicaSet to replace it. As long as the old and new .spec.selector are the same, then the new one will adopt the old Pods. However, it will not make any effort to make existing Pods match a new, different pod template. To update Pods to a new spec in a controlled way, use a Deployment, as ReplicaSets do not support a rolling update directly.
+```
+### Rollout strategies
+Recreate and rolling update.  
+
+Указывается либо в uint либо в процентах:  
+* maxSurge - максимальный оверхед подов
+* maxUnavailable - понятно =)
+#### Blue-green rollout *
+```
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: 
+      maxSurge: 100%
+      maxUnavailable: 0
+```
+
+
+#### Reverse rolling update *
+
+Попробовал применить другой манифест с ревёрс стратегией поверх blue-green той же версии, но, закономерно, ничего не произошло.
+```
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: 
+      maxSurge: 0
+      maxUnavailable: 1
+```
+Однако, судя по логу, создание нового пода начинается до того как предыдущий был полностью удалён:
+```
+paymentservice-5f4bb9d75f-9tnlj   1/1     Running   0          4m35s
+paymentservice-5f4bb9d75f-ss29x   1/1     Running   0          4m35s
+paymentservice-5f4bb9d75f-vlmx7   1/1     Running   0          4m35s
+paymentservice-5f4bb9d75f-ss29x   1/1     Terminating   0          8m37s
+paymentservice-8477c5cfd4-jl5ct   0/1     Pending       0          0s
+paymentservice-8477c5cfd4-jl5ct   0/1     Pending       0          0s
+paymentservice-8477c5cfd4-jl5ct   0/1     ContainerCreating   0          0s
+paymentservice-8477c5cfd4-jl5ct   1/1     Running             0          1s
+paymentservice-5f4bb9d75f-vlmx7   1/1     Terminating         0          8m38s
+paymentservice-8477c5cfd4-9cwkh   0/1     Pending             0          0s
+paymentservice-8477c5cfd4-9cwkh   0/1     Pending             0          0s
+paymentservice-8477c5cfd4-9cwkh   0/1     ContainerCreating   0          0s
+paymentservice-8477c5cfd4-9cwkh   1/1     Running             0          2s
+paymentservice-5f4bb9d75f-9tnlj   1/1     Terminating         0          8m40s
+paymentservice-8477c5cfd4-5rnkj   0/1     Pending             0          0s
+paymentservice-8477c5cfd4-5rnkj   0/1     Pending             0          0s
+paymentservice-8477c5cfd4-5rnkj   0/1     ContainerCreating   0          0s
+paymentservice-8477c5cfd4-5rnkj   1/1     Running             0          2s
+paymentservice-5f4bb9d75f-ss29x   0/1     Terminating         0          9m7s
+paymentservice-5f4bb9d75f-vlmx7   0/1     Terminating         0          9m9s
+paymentservice-5f4bb9d75f-ss29x   0/1     Terminating         0          9m11s
+paymentservice-5f4bb9d75f-ss29x   0/1     Terminating         0          9m11s
+paymentservice-5f4bb9d75f-9tnlj   0/1     Terminating         0          9m11s
+paymentservice-5f4bb9d75f-vlmx7   0/1     Terminating         0          9m21s
+paymentservice-5f4bb9d75f-vlmx7   0/1     Terminating         0          9m21s
+paymentservice-5f4bb9d75f-9tnlj   0/1     Terminating         0          9m21s
+paymentservice-5f4bb9d75f-9tnlj   0/1     Terminating         0          9m21s
+```
+### Probes
+Liveness - Жив ли контейнер или же нужно его перезапустить. Например приложение запущено, но зависло. 
+Readyness - Готов ли контейнер полностью к работе, можно ли на него роутить трафик.
+Startup - отменяет предыдущие два, до тех пор пока его проверка не пройдёт. Нужно, чтобы другие проверки не перезапустили контейнер до тех пор, пока приложение нормально не начнёт работу. Полезно для медленных приложений, БД и т.п.. 
+
+### DaemonSet *
+
+При его применении на каждом физическом хосте создается по одному экземпляру pod, описанного в спецификации.
+Типичные кейсы использования DaemonSet:
+* Сетевые плагины
+* Утилиты для сбора и отправки логов (Fluent Bit, Fluentd, etc...)
+* Различные утилиты для мониторинга (Node Exporter, etc...)
+
+В миникубе kube-proxy управляется daemonset-ом.
+
+Node exporter daemonset взят отсюда - https://github.com/bibinwilson/kubernetes-node-exporter
+
+### DaemonSet on master **
+```
+  template:
+    spec:
+      tolerations:
+      # this toleration is to have the daemonset runnable on master nodes
+      # remove it if your masters can't run pods
+      - key: node-role.kubernetes.io/master
+```
+https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/#writing-a-daemonset-spec
+
+## Homework 3 (Security)
+
