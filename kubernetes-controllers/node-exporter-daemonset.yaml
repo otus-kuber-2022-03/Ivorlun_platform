@@ -1,0 +1,68 @@
+# https://github.com/bibinwilson/kubernetes-node-exporter
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  labels:
+    name: node-exporter
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+        name: node-exporter
+        app: node-exporter
+  template:
+    metadata:
+      labels:
+        name: node-exporter
+        app: node-exporter
+      annotations:
+         prometheus.io/scrape: "true"
+    spec:
+      tolerations:
+      # this toleration is to have the daemonset runnable on master nodes
+      # remove it if your masters can't run pods
+      - key: node-role.kubernetes.io/master
+      hostPID: true
+      hostIPC: true
+      hostNetwork: true
+      containers:
+        - ports:
+            - containerPort: 9100
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 15m
+          securityContext:
+            privileged: true
+          image: prom/node-exporter
+          args:
+            - --path.procfs
+            - /host/proc
+            - --path.sysfs
+            - /host/sys
+            - --collector.filesystem.ignored-mount-points
+            - '"^/(sys|proc|dev|host|etc)($|/)"'
+          name: node-exporter
+          volumeMounts:
+            - name: dev
+              mountPath: /host/dev
+            - name: proc
+              mountPath: /host/proc
+            - name: sys
+              mountPath: /host/sys
+            - name: rootfs
+              mountPath: /rootfs
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: rootfs
+          hostPath:
+            path: /
