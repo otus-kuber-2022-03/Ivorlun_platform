@@ -189,3 +189,37 @@ A Job creates one or more Pods and will continue to retry execution of the Pods 
 
 ## Homework 3 (Security)
 
+### Некоторые важные нюансы  
+Чтобы использовать RBAC (хороший акроним ККК - кого, как и кто) нужно: 
+1. Иметь роль, которая позволяет проводить операции (глаголы) над ресурсами (объектами). Role/ClusterRole.
+1. Иметь Субъект (т.е. кто совершает действия). Subjects (users, groups, or service accounts)
+1. Связать Роль с Субъектом. RoleBinding/ClusterRoleBinding через roleRef. 
+
+* RoleBinding - привязка внутри одного namespace
+* ClusterRoleBinding - на весь кластер
+
+В Binding секция roleRef отвечает за привязку. 
+
+
+Важно, что в кубере множество механизмов защиты требуют неизменяемости ресурсов.  
+Например roleRef:  
+```
+After you create a binding, you cannot change the Role or ClusterRole that it refers to. If you try to change a binding's roleRef, you get a validation error. If you do want to change the roleRef for a binding, you need to remove the binding object and create a replacement.
+``` 
+Т.е. как только у binding-а появились субъекты - нельязя менять роли, которые в связке roleRef перечислены.  
+Это связано с тем, что 
+1. Неизменность roleRef позволяет управлять только списком субъектов, но не менять права, которые им назначены ролью и binding-ом. 
+1. Привязка к другой роли (т.е. другим правам для всей общности) - это фундаментально другой уровень асбракции. Требование пересоздания binding-а, для изменения связи между субъетом и ролью, гарантирует, что всем субъектам нужна новая роль, а не что права лишним субъектам выдадут случайно.
+
+Это грубо, как если бы у группе lol в линуксе дать права на объект, 
+
+С помощью `kubectl auth reconcile` можно создавать манифесты, которые позволяют пересоздавать привязки, если требуется.
+
+Вопрос - а что тогда с ролью? Её можно менять и это ок, что все субъекты получат другие права на ресурсы?  
+Звучит вроде нормально, примерно так, если бы в линуксе группе lol выдали бы права на новую директорию.  
+
+Интересно, что есть ClusterRole, но это совсем не значит, что права будут на весь кластер - можно сделать привязку такой роли в пределах одного namespace.  
+https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles
+
+Роли можно объединять в общности посредством aggregated clusterroles с помощью лейблов: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#aggregated-clusterroles
+
