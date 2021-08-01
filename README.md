@@ -223,3 +223,27 @@ https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles
 
 Роли можно объединять в общности посредством aggregated clusterroles с помощью лейблов: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#aggregated-clusterroles
 
+### Admission controllers
+
+AC может делать две важные функции:
+* Изменять запросы к API (JSON Patch)
+* Пропускать или отклонять запросы к API
+Каждый контроллер может делать обе вещи, если захочет
+❗ Но сначала - мутаторы, потом - валидаторы
+
+Например, есть такие:    
+NamespaceLifecycle:
+* Запрещает создавать новые объекты в удаляемых Namespaces
+* Не допускает указания несуществующих Namespaces
+* Не дает удалить системные Namespaces
+
+ResourceQuota (ns) ограничивает:
+- кол-во объектов
+- общий объем ресурсов
+- объем дискового пространства для volumes
+
+LimitRanger (ns) Возможность принудительно установить ограничения по ресурсам pod-а.
+
+NodeRestriction - Ограничивает возможности kubelet по редактированию Node и Pod  
+ServiceAccount - Автоматически подсовывает в Pod необходимые секреты для функционирования Service Accounts  
+Mutating + Validating AdmissionWebhook - Позволяют внешним обработчикам вмешиваться в обработку запросов, идущих через AC  
