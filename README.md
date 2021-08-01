@@ -221,6 +221,8 @@ After you create a binding, you cannot change the Role or ClusterRole that it re
 Интересно, что есть ClusterRole, но это совсем не значит, что права будут на весь кластер - можно сделать привязку такой роли в пределах одного namespace.  
 https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles
 
+При этом, чтобы дать возможность всем service account-ам одного namespace-а права на доступ ко всему кластеру нужно использовать cluser role binding, но с ограничением `kind: Group name: system:serviceaccounts:namespace`.
+
 Роли можно объединять в общности посредством aggregated clusterroles с помощью лейблов: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#aggregated-clusterroles
 
 ### Admission controllers
@@ -247,3 +249,6 @@ LimitRanger (ns) Возможность принудительно устано�
 NodeRestriction - Ограничивает возможности kubelet по редактированию Node и Pod  
 ServiceAccount - Автоматически подсовывает в Pod необходимые секреты для функционирования Service Accounts  
 Mutating + Validating AdmissionWebhook - Позволяют внешним обработчикам вмешиваться в обработку запросов, идущих через AC  
+
+## Homework 3 (Network)
+
