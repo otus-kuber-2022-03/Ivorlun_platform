@@ -180,7 +180,7 @@ https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/#writing-a-d
 ### Other Info
 
 ### Taints and Tolerations
-*Node affinity* is a property of Pods that attracts them to a set of nodes (either as a preference or a hard requirement). *Taints* are the opposite -- they allow a node to repel a set of pods.
+*Node affinity* is a property of Pods that attracts (притягивать) them to a set of nodes (either as a preference or a hard requirement). *Taints* are the opposite -- they allow a node to repel (отталкивать, отражать) a set of pods.
 
 *Tolerations* are applied to pods, and allow (but do not require) the pods to schedule onto nodes with matching taints.
 
@@ -268,27 +268,77 @@ livenessProbe:
       - '-c'
       - 'ps aux | grep my_web_server_process'
 ```
-бессмысленна в том, что liveness определяет нужно ли перезапуситить контейнер, например из-за зависания приложения. А с учётом того, что процесс приложения вунтри контейнера как правило является основным и, соотвтественно, существует, то это не поможет определить его истинную работоспособность, а проверка всегда будет успешно проходить.  
+бессмысленна в том, что liveness определяет нужно ли перезапуситить контейнер, например из-за зависания приложения. А с учётом того, что процесс приложения вунтри контейнера как правило является основным и, соотвтественно, если контейнер запущен, то существует - описанный подход не поможет определить его истинную работоспособность, а проверка всегда будет успешно проходить.  
 Но, скорее всего, имеет некоторый смысл для приложений у которых pid 1 - init, а целевой процесс будет дочерним.
 
 ### ClusterIP  
 * ClusterIP выделяет IP-адрес для каждого сервиса из особого диапазона (этот адрес виртуален и даже не настраивается на сетевых интерфейсах)
-* Когда pod внутри кластера пытается подключиться к виртуальному IP-адресу сервиса, то node, где запущен pod, меняет адрес получателя всетевых пакетах на настоящий адрес pod-а.
-* Нигде в сети, за пределами ноды, виртуальный ClusterIP не встречается.
+* Когда pod внутри кластера пытается подключиться к виртуальному IP-адресу сервиса, то node, где запущен pod, меняет адрес получателя в сетевых пакетах на настоящий адрес pod-а.
+* Нигде в сети, за пределами ноды, виртуальный ClusterIP не существует.
 
 > IP-адрес для каждого сервиса из особого диапазона 
-
-Что за диапазон такой? local-link?
-
 > (этот адрес виртуален и даже не настраивается на сетевых интерфейсах)  
 
-Вопрос - что имеется ввиду?
+Every node in a Kubernetes cluster runs a kube-proxy. kube-proxy is responsible for implementing a form of virtual IP for Services of type other than ExternalName.
+
+То есть это функционал типа dnat, который заменяет виртуальный ip ClusterIP > Target Pod IP.  
+Соответственно с физических нод этот IP не должен пинговаться - он хранится только в цепочках iptables.  
+
+Вот он
+```
+iptables --list -nv -t nat
+ pkts bytes target     prot opt in     out     source               destination  
+    1    60 KUBE-MARK-MASQ  tcp  --  *      *      !10.244.0.0/16        10.102.189.119       /* default/web-svc-cip cluster IP */ tcp dpt:80
+    1    60 KUBE-SVC-6CZTMAROCN3AQODZ  tcp  --  *      *       0.0.0.0/0            10.102.189.119       /* default/web-svc-cip cluster IP */ tcp dpt:80
+
+```
+Вот балансировка между 3мя enpoint-ами:  
+```
+Chain KUBE-SVC-6CZTMAROCN3AQODZ (1 references)
+ pkts bytes target     prot opt in     out     source               destination         
+    0     0 KUBE-SEP-SLOPQOZW34M3DWKM  all  --  *      *       0.0.0.0/0            0.0.0.0/0            /* default/web-svc-cip */ statistic mode random probability 0.33333333349
+    1    60 KUBE-SEP-JXVMOJ4WLIQT6I2K  all  --  *      *       0.0.0.0/0            0.0.0.0/0            /* default/web-svc-cip */ statistic mode random probability 0.50000000000
+    0     0 KUBE-SEP-HA42FWOOMUOBT5YR  all  --  *      *       0.0.0.0/0            0.0.0.0/0            /* default/web-svc-cip */
+
+```
 
 SEP - Service Endpoint
+
+**Но!**
+В случае работы через ipvs, а не iptables, clusterIP записывается на сетевой интерфейс и перестаёт быть виртуальным адресом и его можно пинговать!  
+При этом правила в iptables построены по-другому. Вместо цепочки правил для каждого сервиса, теперь используются хэш-таблицы (ipset). Можете посмотреть их, установив утилиту ipset.  
+
+То есть в iptables хранится минимум - основная инфа по правилам в быстрых хэш-таблицах, которые как раз хорошо работают при большом количестве нод.
+
+```
+iptables --list -nv -t nat
+ip addr show kube-ipvs0
+ipset list
+```
 
 ### UDP > TCP localDNS
 
 В localDNS, который располагается на ноде и кеширует соответствие, используется upgrade to tcp (from udp), чтобы располагаясь за NATом запросы не терялись.  
+
+### Kube-proxy vs Calico and etc.
+
+CNI cares about Pod IP.
+
+CNI Plugin is focusing on building up an overlay network, without which Pods can't communicate with each other. The task of the CNI plugin is to assign Pod IP to the Pod when it's scheduled, and to build a virtual device for this IP, and make this IP accessable from every node of the cluster.  
+
+kube-proxy
+
+kube-proxy's job is rather simple, it just redirect requests from Cluster IP to Pod IP.  
+kube-proxy has two mode, IPVS and iptables.  
+https://stackoverflow.com/a/54881661
+
+
+Kube-proxy process handles everything related to Services on each node. It ensures that connections to the service cluster IP and port go to a pod that backs the service. If backed by more than one service, kube-proxy load-balances traffic across pods.  
+https://docs.projectcalico.org/networking/use-ipvs  
+Calico gives you a choice of dataplanes, including a pure Linux eBPF dataplane, a standard Linux networking dataplane, and a Windows HNS dataplane.
+
+
+
 
 ### IPVS
 IPVS (IP Virtual Server) implements transport-layer load balancing, usually called Layer 4 LAN switching, as part of Linux kernel.
@@ -340,13 +390,25 @@ Members:
 ### ARP ликбез  
 ARP (address resolution protocol) используется для конвертации IP в MAC, соответственно работает, условно, на L2-канальном уровне, но для L3-сетевого.  
 Для этого он отправляет на широковещательный адрес запрос, все участники подсети его получают, и нужный отправляет ответ.  
-Важно, что можно узнать MAC-и только ПОДсети, так как работает ниже L3-сетевого уровня и, соответственно, за маршрутизатор не выходит.  
-При этом 
+Важно, что можно узнать MAC-и только подсети, так как работает ниже L3-сетевого уровня и, соответственно, за маршрутизатор не выходит.  
+При этом:  
 * Участники сети, получив ARP запрос могут сразу составлять свою таблицу, чтобы в дальнейшем знать куда отправлять трафик
 * Можно генерить запрос Gratuitous ARP (добровольный запрос) собственного ip, который позволит:  
     * оповестить других об изменении своего ip
     * проверить нет ли коллизий ip-адресов в сети
 
 
+
+
+
+### Homework CNI
+
+Документация Calico, кратко и системно излагая, хорошо описывает сетевую систему куба, сервисы и BPF.  
+https://docs.projectcalico.org/about/about-k8s-networking
+
+There are lots of different kinds of CNI plugins, but the two main ones are:
+  * network plugins, which are responsible for connecting pod to the network
+  * IPAM (IP Address Management) plugins, which are responsible for allocating pod IP addresses.
+Both options can be provided simultaneously.
 
 
