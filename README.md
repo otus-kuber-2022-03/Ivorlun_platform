@@ -428,6 +428,20 @@ ARP (address resolution protocol) используется для конверт
 * В реальном окружении это решается добавлением нужной подсети на интерфейс сетевого оборудования
 * Или использованием L3-режима (что потребует усилий от сетевиков, но более предпочтительно)
 
+### Ingress  
+Классная тема вязать ингресс на балансер 
+1. Создаём сервис типа LB, который балансирует 80 и 443 в namespace: ingress-nginx, перехватывая трафик ingress-контроллера, выбирая его по селектору
+1. Создаём сервис типа ClusterIP, но без clusterIP! (clusterIP: None), который выбирает приложение по селектору
+1. Создаём ingress, который проксирует наше приложение, выбирая сервис ClusterIP по backend service name и port.
+
+Из этого получится - единая точка входа, которая балансируется с полными возможностями metallb и openresty nginx-а.  
+
+
+### Ingress creation code snippet out of date
+
+Сейчас другой синтаксис и доступно в v1, а не v1beta1 версии: https://kubernetes.io/docs/concepts/services-networking/ingress/#the-ingress-resource
+
+
 
 ### Homework CNI
 
