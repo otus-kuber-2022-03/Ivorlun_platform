@@ -1,18 +1,3 @@
-# apiVersion: networking.k8s.io/v1beta1
-# kind: Ingress
-# metadata:
-#   name: web
-#   annotations:
-#     nginx.ingress.kubernetes.io/rewrite-target: /
-# spec:
-#   rules:
-#   - http:
-#       paths:
-#       - path: /web
-#         backend:
-#           serviceName: web-svc
-#           servicePort: 8000
-
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -21,18 +6,30 @@ metadata:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
-  defaultBackend:
-    service:
-      name: web-svc
-      port:
-        number: 8000
-  # rules:
-  # - http:
-  #     paths:
-  #     - path: /web
-  #       pathType: Prefix
-  #       backend:
-  #         service:
-  #           name: web-svc
-  #           port:
-  #             number: 8000
+  rules:
+  - http:
+      paths:
+      - path: /web
+        pathType: Prefix
+        backend:
+          service:
+            name: web-svc
+            port:
+              number: 8000
+
+# # Example from HW
+# apiVersion: networking.k8s.io/v1beta1
+# kind: Ingress
+# metadata:
+#   name: web
+#   annotations:
+#     nginx.ingress.kubernetes.io/rewrite-target: /
+# spec:
+#   ingressClassName: nginx
+#   rules:
+#   - http:
+#       paths:
+#       - path: /web
+#         backend:
+#           serviceName: web-svc
+#           servicePort: 8000
