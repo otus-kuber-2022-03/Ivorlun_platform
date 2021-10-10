@@ -190,6 +190,10 @@ A Job creates one or more Pods and will continue to retry execution of the Pods 
 ## Homework 4 (Security)
 
 ### Некоторые важные нюансы  
+
+`Default Service Account` - Создаётся автоматически вместе с namespace-ом, он присваивается новым подам, чтобы они могли обращаться в Kube API.  
+Когда создаёшь SA, то для него кубер автоматически создаёт secret, а именно - токен!  
+
 Чтобы использовать RBAC (хороший акроним ККК - кого, как и кто) нужно: 
 1. Иметь роль, которая позволяет проводить операции (глаголы) над ресурсами (объектами). Role/ClusterRole.
 1. Иметь Субъект (т.е. кто совершает действия). Subjects (users, groups, or service accounts)
@@ -429,6 +433,7 @@ ARP (address resolution protocol) используется для конверт
 * Или использованием L3-режима (что потребует усилий от сетевиков, но более предпочтительно)
 
 ### Ingress  
+#### Ingress headless service  
 Классная тема вязать ингресс на балансер 
 1. Создаём сервис типа LB, который балансирует 80 и 443 в namespace: ingress-nginx, перехватывая трафик ingress-контроллера, выбирая его по селектору
 1. Создаём сервис типа ClusterIP, но без clusterIP! (clusterIP: None), который выбирает приложение по селектору
@@ -440,6 +445,17 @@ ARP (address resolution protocol) используется для конверт
 ### Ingress creation code snippet out of date
 
 Сейчас другой синтаксис и доступно в v1, а не v1beta1 версии: https://kubernetes.io/docs/concepts/services-networking/ingress/#the-ingress-resource
+
+### Ingress context path shift to root problem  
+```
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /web
+```
+Похоже, что ингресс nginx-а не должен переписывать / и сдвигать контекст: т.е. если ингресс имеет endpoint вида
+https://ingress/web/index.html, то он не может, просто убрав префикс, заммапить запрос в контейнер, в котором в location / лежит index.html и работает по урлу https://endpoint/index.html. 
 
 
 
