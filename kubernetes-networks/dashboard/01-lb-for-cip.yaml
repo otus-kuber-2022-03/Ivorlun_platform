@@ -9,7 +9,12 @@ spec:
   ports:
   - port: 443
     protocol: TCP
-    targetPort: 443
+    targetPort: 8443
   selector:
     k8s-app: kubernetes-dashboard
   type: LoadBalancer
+  # clusterIP: 10.102.161.93
+# status:
+#   loadBalancer:
+#     ingress:
+#     - ip: 192.0.2.127

@@ -402,6 +402,22 @@ Members:
 10.100.114.194,tcp:8000
 ```
 
+#### Snippet for cleaning rules and creating route  
+```
+cat <<EOF >> /tmp/iptables.cleanup
+*nat
+-A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
+COMMIT
+*filter
+COMMIT
+*mangle
+COMMIT
+EOF
+iptables-restore /tmp/iptables.cleanup
+
+sudo ip route add 172.17.255.0/24 via 192.168.49.2
+```
+
 ### MetalLB  
 
 После зачистки правил и уничтожения куб прокси, почему-то накрылся DNS внутри minikube-а.  
@@ -436,7 +452,7 @@ ARP (address resolution protocol) используется для конверт
 #### Ingress headless service  
 Классная тема вязать ингресс на балансер 
 1. Создаём сервис типа LB, который балансирует 80 и 443 в namespace: ingress-nginx, перехватывая трафик ingress-контроллера, выбирая его по селектору
-1. Создаём сервис типа ClusterIP, но без clusterIP! (clusterIP: None), который выбирает приложение по селектору
+1. Создаём сервис типа ClusterIP, но без clusterIP! (clusterIP: None), который выбирает приложение по селектору https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
 1. Создаём ingress, который проксирует наше приложение, выбирая сервис ClusterIP по backend service name и port.
 
 Из этого получится - единая точка входа, которая балансируется с полными возможностями metallb и openresty nginx-а.  
@@ -457,7 +473,29 @@ spec:
 Похоже, что ингресс nginx-а не должен переписывать / и сдвигать контекст: т.е. если ингресс имеет endpoint вида
 https://ingress/web/index.html, то он не может, просто убрав префикс, заммапить запрос в контейнер, в котором в location / лежит index.html и работает по урлу https://endpoint/index.html. 
 
+В общем получилось исправить следующей конфигурацией, наподобие примеру https://github.com/kubernetes/ingress-nginx/blob/main/docs/examples/rewrite/README.md#rewrite-target:  
 
+```
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /web(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: web-svc
+            port:
+              number: 8000
+
+```
 
 ### Homework CNI
 
