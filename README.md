@@ -404,6 +404,13 @@ Members:
 
 #### Snippet for cleaning rules and creating route  
 ```
+k edit -n kube-system cm kube-proxy
+kubectl --namespace kube-system delete pod --selector='k8s-app=kube-proxy'
+
+minikube ssh "sudo -i"
+sed -i "s/nameserver 192.168.49.1/nameserver 192.168.49.1\nnameserver 1.1.1.1/g" /etc/resolv.conf > /etc/resolv.conf.new
+mv /etc/resolv.conf.new /etc/resolv.conf
+
 cat <<EOF >> /tmp/iptables.cleanup
 *nat
 -A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE

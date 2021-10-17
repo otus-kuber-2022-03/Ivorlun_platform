@@ -5,6 +5,7 @@ metadata:
   namespace: kubernetes-dashboard
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # nginx.ingress.kubernetes.io/app-root: /dashboard
 spec:
   ingressClassName: nginx
   rules:
@@ -14,6 +15,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name:  kubernetes-dashboard
+            name:  dashboard-svc
             port:
               number: 443
