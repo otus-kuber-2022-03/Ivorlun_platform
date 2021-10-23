@@ -404,7 +404,13 @@ Members:
 
 #### Snippet for cleaning rules and creating route  
 ```
-k edit -n kube-system cm kube-proxy
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+  sed -e "s/mode: \"\"/mode: \"ipvs\"/" | \
+  kubectl apply -f - -n kube-system
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+  sed -e "s/strictARP: false/strictARP: true/" | \
+  kubectl apply -f - -n kube-system
+
 kubectl --namespace kube-system delete pod --selector='k8s-app=kube-proxy'
 
 minikube ssh "sudo -i"
@@ -500,9 +506,124 @@ spec:
           service:
             name: web-svc
             port:
-              number: 8000
+              number: 80
 
 ```
+Суть связки в том, что ЛБ даёт возможность получить доступ извне внутрь кластера и резервирует для этого адрес, а ingress позволяет разделить доступ к разным сервисам, например, по контекстному пути.  
+Т.е. если удалить ингресс выше, то доступ к сервису пропадёт, несмотря на то, что балансировщик будет работать:  
+```
+❯ k delete -f ../web-ingress.yaml 
+ingress.networking.k8s.io "web" deleted
+$ 
+❯ curl -k https://172.17.255.2/web/index.html
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+```
+### Kuber Dashboard context ingress
+Дашборд легко привязался к тому же ингрессу и его эндпоинту, однако важны были аннотации:
+```
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+```
+Так как первая переключала протокол на безопасный, а **rewrite-target: /$1 позволяла не конфликтовать с существующим префиксом для другого сервиса** - т.е. на одном бэкенде $1, на другом - $2.
+
+### Canary Ingress и как взаимодействуют компоненты при использовании ingress и MetalLB 
+Итого важный момент, как это всё взаимодействует в конкретном примере и в принципе.  
+
+Существуют 2 deployment-а в namespace default:
+* web - 3 replicas
+* web-canary - 2 replicas
+
+Существуют для каждого из них headless ClusterIP service-ы, которые по селектору `label=web` или `label=web-canary` выбирают на какую группу подов обращаться.
+* web-svc
+* web-canary-svc
+
+Для того, чтобы сделать содержание их index.html доступным по контексту `/web/` (т.е. http://address/web/index.html) используются для каждого ingress-ы, то есть правила маршрутизации трафика извне, в данном случае, на сервисы ClusterIP.  
+* web
+* web-canary
+
+Причём, ingress canary включается только при наличии в запросе header-а `canary=forsure`:  
+```
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$3
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-by-header: "canary"
+    nginx.ingress.kubernetes.io/canary-by-header-value: "forsure"
+```
+
+Наконец, есть сервис типа load balancer (то есть metallb, настоящий L4-балансировщик, установленный как отдельный контроллер - 172.17.255.2), который связан с классом ingress-nginx
+```
+...
+kind: Service
+spec:
+  externalTrafficPolicy: Local
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/component: controller
+...
+```
+и, связывающий все обращения на него, с правилами ingress-ов, которые используют `ingressClassName: nginx`.
+
+То есть, все обращения вида `curl http(s)://172.17.255.2/*` физически попадают на балансировщик, а дальше маршрутизируются согласно правилам ingress-ов на целевые бэкенды.  
+
+В данном примере, все запросы, которые имеют header `canary=forsure`, перенаправляются на поды canary, а те, которые не имеют, на предыдущие.
+```
+❯ curl -k https://172.17.255.2/web/index.html | tail
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 83783    0 83783    0     0  4812k      0 --:--:-- --:--:-- --:--:-- 5113k
+<pre># Kubernetes-managed hosts file.
+127.0.0.1	localhost
+::1	localhost ip6-localhost ip6-loopback
+fe00::0	ip6-localnet
+fe00::0	ip6-mcastprefix
+fe00::1	ip6-allnodes
+fe00::2	ip6-allrouters
+172.17.0.3	web-59c5c547b7-q87sq</pre>
+</body>
+</html>
+  kubernetes-networks U:4 ?:2  ~/git/Ivorlun_platform/kubernetes-networks                                                            17:18:14  ivan 
+❯ curl -k -H "canary: forsure" https://172.17.255.2/web/index.html | tail
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 83811    0 83811    0     0  5456k      0 --:--:-- --:--:-- --:--:-- 5456k
+<pre># Kubernetes-managed hosts file.
+127.0.0.1	localhost
+::1	localhost ip6-localhost ip6-loopback
+fe00::0	ip6-localnet
+fe00::0	ip6-mcastprefix
+fe00::1	ip6-allnodes
+fe00::2	ip6-allrouters
+172.17.0.11	web-canary-54cdcc6d8-xd85x</pre>
+</body>
+</html>
+```
+
+#### Полезные варианты работы с Canary-аннотациями
+
+Дальше, выбор ограничивается только параметрами запросов - крутой вариант использования, например по языкам или странам:  
+
+```
+    nginx.ingress.kubernetes.io/canary-by-header: "Region"
+    nginx.ingress.kubernetes.io/canary-by-header-pattern: "cd|sz"
+```
+Как предлагают тут - https://intl.cloud.tencent.com/document/product/457/38413.  
+
+Возможны и другие аннотации, помимо header-ов:  
+https://github.com/kubernetes/ingress-nginx/blob/main/docs/user-guide/nginx-configuration/annotations.md#canary  
+
+Более того самые полезные, имхо, `nginx.ingress.kubernetes.io/canary-weight: "10"`, так как они позволяют без изменения запросов просто бесшовно 10% траффика перенаправлять на выбранную группу подов.
+https://mcs.mail.ru/help/ru_RU/cases-bestpractive/k8s-canary  
+https://v2-1.docs.kubesphere.io/docs/quick-start/ingress-canary/
+
 
 ### Homework CNI
 
