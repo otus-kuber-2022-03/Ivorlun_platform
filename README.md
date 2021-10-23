@@ -436,6 +436,17 @@ sudo ip route add 172.17.255.0/24 via 192.168.49.2
 После зачистки правил и уничтожения куб прокси, почему-то накрылся DNS внутри minikube-а.  
 Но, может быть, из-за подключения к VPN-у, который переписал на хосте resolv.conf.
 
+В общем постоянная проблема в миникубе - приходится изменять внутри контейнера миникуба resolv или изменять cm coredns примерно так https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/#example-1:  
+```
+apiVersion: v1
+data:
+  stubDomains: |
+        {"abc.com" : ["1.2.3.4"], "my.cluster.local" : ["2.3.4.5"]}
+  upstreamNameservers: |
+        ["8.8.8.8", "8.8.4.4"]
+kind: ConfigMap
+```
+
 #### Share single ip for several services
 ```
   annotations:
@@ -590,7 +601,7 @@ fe00::2	ip6-allrouters
 172.17.0.3	web-59c5c547b7-q87sq</pre>
 </body>
 </html>
-  kubernetes-networks U:4 ?:2  ~/git/Ivorlun_platform/kubernetes-networks                                                            17:18:14  ivan 
+ 
 ❯ curl -k -H "canary: forsure" https://172.17.255.2/web/index.html | tail
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
@@ -624,6 +635,10 @@ https://github.com/kubernetes/ingress-nginx/blob/main/docs/user-guide/nginx-conf
 https://mcs.mail.ru/help/ru_RU/cases-bestpractive/k8s-canary  
 https://v2-1.docs.kubesphere.io/docs/quick-start/ingress-canary/
 
+### Полезные ссылки
+Примеры работы с ингрессом и сервис для тестов
+
+https://github.com/kubernetes/ingress-nginx/blob/main/docs/examples/http-svc.yaml
 
 ### Homework CNI
 
