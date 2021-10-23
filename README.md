@@ -636,6 +636,10 @@ https://mcs.mail.ru/help/ru_RU/cases-bestpractive/k8s-canary
 https://v2-1.docs.kubesphere.io/docs/quick-start/ingress-canary/
 
 ### Полезные ссылки
+Инструмент автоматизации развёртывания приложений в кубере  и его пример работы с canary и ингрессом:
+https://docs.flagger.app/tutorials/nginx-progressive-delivery
+
+
 Примеры работы с ингрессом и сервис для тестов
 
 https://github.com/kubernetes/ingress-nginx/blob/main/docs/examples/http-svc.yaml
