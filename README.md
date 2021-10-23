@@ -639,6 +639,10 @@ https://v2-1.docs.kubesphere.io/docs/quick-start/ingress-canary/
 Инструмент автоматизации развёртывания приложений в кубере  и его пример работы с canary и ингрессом:
 https://docs.flagger.app/tutorials/nginx-progressive-delivery
 
+```
+Flagger implements several deployment strategies (Canary releases, A/B testing, Blue/Green mirroring) using a service mesh (App Mesh, Istio, Linkerd, Open Service Mesh) or an ingress controller (Contour, Gloo, NGINX, Skipper, Traefik) for traffic routing. For release analysis, Flagger can query Prometheus, Datadog, New Relic, CloudWatch or Graphite and for alerting it uses Slack, MS Teams, Discord and Rocket.
+```
+
 
 Примеры работы с ингрессом и сервис для тестов
 
