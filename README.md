@@ -1,7 +1,7 @@
 # Ivorlun_platform
 Ivorlun Platform repository
 
-## Homework 2 (Intro)
+# Homework 2 (Intro)
 
 ### Unhealthy controller-manager and scheduler
 
@@ -78,7 +78,7 @@ Pod frontend не запускается, так как для контейне�
 https://github.com/GoogleCloudPlatform/microservices-demo/blob/v0.2.3/kubernetes-manifests/frontend.yaml
 
 
-## Homework 3 (Controllers)
+# Homework 3 (Controllers)
 
 Неправильно в примере указан api для конфига kind - должен быть `apiVersion: kind.x-k8s.io/v1alpha4`.
 
@@ -92,13 +92,13 @@ https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#deleting-j
 ```
 Once the original is deleted, you can create a new ReplicaSet to replace it. As long as the old and new .spec.selector are the same, then the new one will adopt the old Pods. However, it will not make any effort to make existing Pods match a new, different pod template. To update Pods to a new spec in a controlled way, use a Deployment, as ReplicaSets do not support a rolling update directly.
 ```
-### Rollout strategies
+## Rollout strategies
 Recreate and rolling update.  
 
 Указывается либо в uint либо в процентах:  
 * maxSurge - максимальный оверхед подов
 * maxUnavailable - понятно =)
-#### Blue-green rollout *
+### Blue-green rollout *
 ```
   strategy:
     type: RollingUpdate
@@ -108,7 +108,7 @@ Recreate and rolling update.
 ```
 
 
-#### Reverse rolling update *
+### Reverse rolling update *
 
 Попробовал применить другой манифест с ревёрс стратегией поверх blue-green той же версии, но, закономерно, ничего не произошло.
 ```
@@ -148,12 +148,12 @@ paymentservice-5f4bb9d75f-vlmx7   0/1     Terminating         0          9m21s
 paymentservice-5f4bb9d75f-9tnlj   0/1     Terminating         0          9m21s
 paymentservice-5f4bb9d75f-9tnlj   0/1     Terminating         0          9m21s
 ```
-### Probes
+## Probes
 * Liveness - Жив ли контейнер или же нужно его перезапустить. Например приложение запущено, но зависло. Можно ловить в выводе дедблок, который об этом свидетельствует. 
 * Readiness - Готов ли контейнер полностью к работе, можно ли на него роутить трафик. Если под перестаёт быть готов, то его автоматом убирают из списка lb.
 * Startup - задерживает предыдущие две, до тех пор пока его проверка не пройдёт. Нужно, чтобы другие probы не перезапустили контейнер пока приложение нормально не начнёт работу. Полезно для медленных приложений, БД и т.п.. 
 
-### DaemonSet *
+## DaemonSet *
 
 A DaemonSet ensures that all (or some) Nodes run a copy of a Pod. As nodes are added to the cluster, Pods are added to them. As nodes are removed from the cluster, those Pods are garbage collected.
 
@@ -177,28 +177,28 @@ Node exporter daemonset взят отсюда - https://github.com/bibinwilson/k
 ```
 https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/#writing-a-daemonset-spec
 
-### Other Info
+## Other Info
 
 ### Taints and Tolerations
 *Node affinity* is a property of Pods that attracts (притягивать) them to a set of nodes (either as a preference or a hard requirement). *Taints* are the opposite -- they allow a node to repel (отталкивать, отражать) a set of pods.
 
 *Tolerations* are applied to pods, and allow (but do not require) the pods to schedule onto nodes with matching taints.
 
-#### Jobs
+### Jobs
 A Job creates one or more Pods and will continue to retry execution of the Pods until a specified number of them successfully terminate.
 
-## Homework 4 (Security)
+# Homework 4 (Security)
 
-### Некоторые важные нюансы  
-
+## Некоторые важные нюансы  
+### Default Service Account
 `Default Service Account` - Создаётся автоматически вместе с namespace-ом, он присваивается новым подам, чтобы они могли обращаться в Kube API.  
 Когда создаёшь SA, то для него кубер автоматически создаёт secret, а именно - токен!  
-
+### RBAC
 Чтобы использовать RBAC (хороший акроним ККК - кого, как и кто) нужно: 
 1. Иметь роль, которая позволяет проводить операции (глаголы) над ресурсами (объектами). Role/ClusterRole.
 1. Иметь Субъект (т.е. кто совершает действия). Subjects (users, groups, or service accounts)
 1. Связать Роль с Субъектом. RoleBinding/ClusterRoleBinding через roleRef. 
-
+### RoleBindings
 * RoleBinding - привязка внутри одного namespace
 * ClusterRoleBinding - на весь кластер
 
@@ -215,8 +215,7 @@ After you create a binding, you cannot change the Role or ClusterRole that it re
 1. Неизменность roleRef позволяет управлять только списком субъектов, но не менять права, которые им назначены ролью и binding-ом. 
 1. Привязка к другой роли (т.е. другим правам для всей общности субъектов) - это фундаментально другой уровень асбракции. Требование пересоздания binding-а, для изменения связи между субъетом и ролью, гарантирует, что всем субъектам нужна новая роль, а не что права лишним субъектам выдадут случайно.
 
-Грубо, это как в линуксе группе lol дать права записи на объект,  
-
+### Пересоздание roleref
 С помощью `kubectl auth reconcile` можно создавать манифесты, которые позволяют пересоздавать привязки, если требуется.
 
 Вопрос - а что тогда с ролью? Её можно менять и это ок, что все субъекты получат другие права на ресурсы?  
@@ -229,7 +228,7 @@ https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles
 
 Роли можно объединять в общности посредством aggregated clusterroles с помощью лейблов: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#aggregated-clusterroles
 
-### Admission controllers
+## Admission controllers
 
 AC может делать две важные функции:
 * Изменять запросы к API (JSON Patch)
@@ -238,23 +237,23 @@ AC может делать две важные функции:
 ❗ Но сначала - мутаторы, потом - валидаторы
 
 Например, есть такие:    
-NamespaceLifecycle:
+**NamespaceLifecycle**:
 * Запрещает создавать новые объекты в удаляемых Namespaces
 * Не допускает указания несуществующих Namespaces
 * Не дает удалить системные Namespaces
 
-ResourceQuota (ns) ограничивает:
+**ResourceQuota** (ns) ограничивает:
 - кол-во объектов
 - общий объем ресурсов
 - объем дискового пространства для volumes
 
-LimitRanger (ns) Возможность принудительно установить ограничения по ресурсам pod-а.
+**LimitRanger** (ns) Возможность принудительно установить ограничения по ресурсам pod-а.
 
 NodeRestriction - Ограничивает возможности kubelet по редактированию Node и Pod  
 ServiceAccount - Автоматически подсовывает в Pod необходимые секреты для функционирования Service Accounts  
 Mutating + Validating AdmissionWebhook - Позволяют внешним обработчикам вмешиваться в обработку запросов, идущих через AC  
 
-## Homework 5 (Network)
+# Homework 5 (Network)
 
 При попыктке обновить liveness для уже написанного манифеста, kubectl вернул ошибку:  
 ```
@@ -306,7 +305,7 @@ Chain KUBE-SVC-6CZTMAROCN3AQODZ (1 references)
 
 ```
 
-SEP - Service Endpoint
+**SEP** - Service Endpoint
 
 **Но!**
 В случае работы через ipvs, а не iptables, clusterIP записывается на сетевой интерфейс и перестаёт быть виртуальным адресом и его можно пинговать!  
@@ -336,17 +335,17 @@ Members:
 10.96.0.10,udp:53
 ```
 
-### UDP > TCP localDNS
+### Upgrade UDP > TCP localDNS
 
 В localDNS, который располагается на ноде и кеширует соответствие, используется upgrade to tcp (from udp), чтобы располагаясь за NATом запросы не терялись.  
 
-### Kube-proxy vs Calico and etc.
+## Kube-proxy vs CNIs (Calico and etc.)
 
-CNI cares about Pod IP.
+### CNI cares about Pod IP.
 
 CNI Plugin is focusing on building up an overlay network, without which Pods can't communicate with each other. The task of the CNI plugin is to assign Pod IP to the Pod when it's scheduled, and to build a virtual device for this IP, and make this IP accessable from every node of the cluster.  
 
-kube-proxy
+### kube-proxy
 
 kube-proxy's job is rather simple, it just redirect requests from Cluster IP to Pod IP.  
 kube-proxy has two mode, IPVS and iptables.  
@@ -360,7 +359,7 @@ Calico gives you a choice of dataplanes, including a pure Linux eBPF dataplane, 
 
 
 
-### IPVS
+## IPVS
 IPVS (IP Virtual Server) implements transport-layer load balancing, usually called Layer 4 LAN switching, as part of Linux kernel.
 
 IPVS runs on a host and acts as a load balancer in front of a cluster of real servers. IPVS can direct requests for TCP and UDP-based services to the real servers, and make services of real servers appear as virtual services on a single IP address.
@@ -453,7 +452,7 @@ kind: ConfigMap
     metallb.universe.tf/allow-shared-ip: "true"
 ```
 
-### ARP ликбез  
+## ARP ликбез  
 ARP (address resolution protocol) используется для конвертации IP в MAC, соответственно работает, условно, на L2-канальном уровне, но для L3-сетевого.  
 Для этого он отправляет на широковещательный адрес запрос, все участники подсети его получают, и нужный отправляет ответ.  
 Важно, что можно узнать MAC-и только подсети, так как работает ниже L3-сетевого уровня и, соответственно, за маршрутизатор не выходит.  
@@ -472,8 +471,8 @@ ARP (address resolution protocol) используется для конверт
 * В реальном окружении это решается добавлением нужной подсети на интерфейс сетевого оборудования
 * Или использованием L3-режима (что потребует усилий от сетевиков, но более предпочтительно)
 
-### Ingress  
-#### Ingress headless service  
+## Ingress  
+### Ingress headless service  
 Классная тема вязать ингресс на балансер 
 1. Создаём сервис типа LB, который балансирует 80 и 443 в namespace: ingress-nginx, перехватывая трафик ingress-контроллера, выбирая его по селектору
 1. Создаём сервис типа ClusterIP, но без clusterIP! (clusterIP: None), который выбирает приложение по селектору https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
@@ -544,7 +543,7 @@ $
 ```
 Так как первая переключала протокол на безопасный, а **rewrite-target: /$1 позволяла не конфликтовать с существующим префиксом для другого сервиса** - т.е. на одном бэкенде $1, на другом - $2.
 
-### Canary Ingress и как взаимодействуют компоненты при использовании ingress и MetalLB 
+## Canary Ingress и как взаимодействуют компоненты при использовании ingress и MetalLB 
 Итого важный момент, как это всё взаимодействует в конкретном примере и в принципе.  
 
 Существуют 2 deployment-а в namespace default:
@@ -618,7 +617,7 @@ fe00::2	ip6-allrouters
 </html>
 ```
 
-#### Полезные варианты работы с Canary-аннотациями
+### Полезные варианты работы с Canary-аннотациями
 
 Дальше, выбор ограничивается только параметрами запросов - крутой вариант использования, например по языкам или странам:  
 
@@ -635,7 +634,7 @@ https://github.com/kubernetes/ingress-nginx/blob/main/docs/user-guide/nginx-conf
 https://mcs.mail.ru/help/ru_RU/cases-bestpractive/k8s-canary  
 https://v2-1.docs.kubesphere.io/docs/quick-start/ingress-canary/
 
-### Полезные ссылки
+## Полезные ссылки
 Инструмент автоматизации развёртывания приложений в кубере  и его пример работы с canary и ингрессом:
 https://docs.flagger.app/tutorials/nginx-progressive-delivery
 
@@ -648,7 +647,176 @@ Flagger implements several deployment strategies (Canary releases, A/B testing, 
 
 https://github.com/kubernetes/ingress-nginx/blob/main/docs/examples/http-svc.yaml
 
-### Homework CNI
+# Homework 21 (Volumes and Storages)
+
+## Synopsis  
+Данные внутри контейнеров и подов эфемерны, поэтому, чтобы они сохранялись между перезапусками, используется механизм volume-ов, как в docker-е.   
+Также часто необходимо иметь возможность 2м контейнерам обращаться к одим и тем же файлам.  
+Volume-ы решают обе проблемы.  
+## Volumes
+**Volume** - абстракция реального хранилища (A directory containing data, accessible to the containers in a pod) 
+* Volume создается и удаляется вместе с подом
+* Один и тот же Volume может использоваться одновременно несколькими контейнерами в поде
+Далее все volumes делятся на 2 вида - volume и persistent.
+### Volume types  
+Их целое множество - cephfs volume, azureFile CSI migration, glusterfs, iscsi, etc.  
+#### emptyDir
+* Существует пока под запущен
+* Изначально пустой каталог на хосте
+* Все контейнеры в поде могут читать и записывать внутри файлы, причём монтирование может быть по разным путям
+* Данные могут храниться в tmpfs (чревато OOM)
+#### hostPath
+* Возможность монтировать файл или директорию с хоста
+* Часто используется для служебных сервисов 
+    * Node Exporter
+    * Fluentd/Fluent Bit
+    * running cAdvisor in a container; use a hostPath of /sys
+    * running a container that needs access to Docker internals; use a hostPath of /var/lib/docker
+* Типов монтирования много:  
+    * DirectoryOrCreate
+    * Directory
+    * Socket
+    * CharDevice
+    * BlockDevice
+    * FileOrCreate
+    * File
+* Кубер не рекомендует, так как очень небезопасно как с точки зрения привилегий, так и с точки зрения разницы сред 
+#### downwardAPI  
+##### Expose Pod Information to Containers Through Files
+There are two ways to expose Pod and Container fields to a running Container:
+* Environment variables
+* Volume Files  
+
+### projected
+A projected volume maps several existing volume sources into the same directory.
+```
+  volumes:
+  - name: all-in-one
+    projected:
+      sources:
+      - secret:
+          name: mysecret
+          items:
+            - key: username
+              path: my-group/my-username
+      - downwardAPI:
+          items:
+            - path: "labels"
+              fieldRef:
+                fieldPath: metadata.labels
+            - path: "cpu_limit"
+              resourceFieldRef:
+                containerName: container-test
+                resource: limits.cpu
+```
+Together, these two ways of exposing Pod and Container fields are called the Downward API.
+## Persistent Volumes
+* Создаются на уровне кластера
+* PV похожи на обычные Volume, но имеют отдельный от сервисов жизненный цикл  
+
+Но их уже нельзя просто "объявить" - нужно реализовать привязку нагрузки к PV через PVC.
+
+Отдельно, стоит выделить local volume - так как он привязывается к ноде. https://kubernetes.io/docs/concepts/storage/_print/#local
+
+## persistentVolumeClaim  
+Запрос на использование какого-либо PV для POD-а.  
+То есть это способ привязки без необходимости углубления в детали конкретной технологии фс и её реализации.
+
+### Claims As Volumes
+Вообще PVC это отдельный объект и может объявляться в самостоятельных манифестах, однако возможно объявление прямо в pod.spec:  
+```
+spec:
+  containers:
+    - name: myfrontend
+      image: nginx
+      volumeMounts:
+      - mountPath: "/var/www/html"
+        name: mypd
+  volumes:
+    - name: mypd
+      persistentVolumeClaim:
+        claimName: myclaim
+```
+### PV Reclaiming 
+PV может иметь несколько разных политик переиспользования ресурсов хранилища:
+* **Retain** - после удаления PVC, PV переходит в состояние “released”, чтобы переиспользовать ресурс, администратор должен вручную удалить PV, освободить место во внешнем хранилище (удалить данные или сделать их резервную копию)
+* **Delete** - (плагин должен поддерживать эту политику) PV удаляется вместе с PVC и высвобождается ресурс во внешнем хранилище
+* **Recycle** (deprecated) - удаляет все содержимое PV и делает его доступным для использования 
+
+### PV Access Modes
+Тома монтируются к кластеру с помощью различных провайдеров, они имеют различные разрешения доступа чтения/записи, PV дает общие для всех провайдеров режимы.  
+PV монтируется на хост с одним их трех режимов доступа:  
+* **ReadWriteOnce** - **RWO** - только один узел может монтировать том для чтения и записи
+* **ReadOnlyMany** - **ROX** - несколько узлов могут монтировать том для чтения
+* **ReadWriteMany** - **RWX** - несколько узлов могут монтировать том для чтения и записи
+
+### ConfigMap & Secret
+
+Надо отметить, что эти два типа ресурсов так же являются PV.
+
+**СonfigMap** - хранят:  
+* конфигурацию приложений
+* значения переменных окружения отдельно от конфигурации пода  
+
+**Secret** - хранят чувствительные данные (возможно шифрование содержимого в etcd, но в манифестах - base64)  
+
+You can store secrets in the Kubernetes API and mount them as files for use by pods without coupling to Kubernetes directly. secret volumes are backed by tmpfs (a RAM-backed filesystem) so they are never written to non-volatile storage.
+
+Оба типа функционируют схожим образом:
+1. Сначала создаем соответствующий ресурс (ConfigMap, Secret)  
+2. В конфигурации пода в описании volumes или переменных окружения ссылаемся на созданный ресурс  
+
+## PVC earning lifecycle 
+Стандартный путь:  
+1. Создаётся StorageClass, который позволяет привязать реальное хранилище к pv
+2. Создаётся PV
+3. Создаётся PVC пользователем
+4. Кубер находит подходящий под PVC PV
+5. Создаётся POD с volume-ом, который ссылается на PVC
+
+### В какой момент происходит монтирование
+1. Kubernetes монтирует сетевой диск на ноду
+2. Runtime пробрасывает том в контейнер
+
+## Storage Classes
+Описание "классов" различных систем хранения
+Разные классы могут использоваться для:
+* Произвольных политик (например переиспользования?)
+* Динамического provisioning
+
+## StatefulSet
+Поды в StatefulSet относятся к "питомцам", а не "стаду", поэтому:
+* Каждый под имеет уникальное состояние (имя, сетевой адрес и volume-ы)
+* Для каждого pod-а создается отдельный PVC
+## Homework part  
+
+### MinIO StatefulSet
+
+Интересный момент, что сначала создаётся PVC, а затем создаётся PV под него в данном случае  
+```
+❯ k get ev
+LAST SEEN   TYPE     REASON                  OBJECT                               MESSAGE
+5m21s       Normal   WaitForFirstConsumer    persistentvolumeclaim/data-minio-0   waiting for first consumer to be created before binding
+5m21s       Normal   ExternalProvisioning    persistentvolumeclaim/data-minio-0   waiting for a volume to be created, either by external provisioner "rancher.io/local-path" or manually created by system administrator
+5m21s       Normal   Provisioning            persistentvolumeclaim/data-minio-0   External provisioner is provisioning volume for claim "default/data-minio-0"
+5m19s       Normal   ProvisioningSucceeded   persistentvolumeclaim/data-minio-0   Successfully provisioned volume pvc-f3a65b28-a1ba-4b83-a109-22326015c61f
+5m18s       Normal   Scheduled               pod/minio-0                          Successfully assigned default/minio-0 to kind-control-plane
+5m17s       Normal   Pulling                 pod/minio-0                          Pulling image "minio/minio:RELEASE.2019-07-10T00-34-56Z"
+3m26s       Normal   Pulled                  pod/minio-0                          Successfully pulled image "minio/minio:RELEASE.2019-07-10T00-34-56Z" in 1m51.278097132s
+3m26s       Normal   Created                 pod/minio-0                          Created container minio
+3m26s       Normal   Started                 pod/minio-0                          Started container minio
+5m21s       Normal   SuccessfulCreate        statefulset/minio                    create Claim data-minio-0 Pod minio-0 in StatefulSet minio success
+5m21s       Normal   SuccessfulCreate        statefulset/minio                    create Pod minio-0 in StatefulSet minio successful
+```
+В ДЗ предлагают использовать для просмотра mc, но есть ui, в котором можно работать с бакетами по 9000 порту. Забавно, что он показывает использованное пространство для всего сегмента фс, а не для pvc в 10 гигабайт, который ему по идее должен быть выдан.
+
+
+То есть порядок действий следующий:  
+* Создаётся statefulset с MinIO, у которого есть просто volume, в котором он будет хранить данные
+* Вместе с ним создаётся RWO volumeClaim, который запрашивает (видимо у какого-то плагина в кластере?) квоту на pv со storageClass=standard и volumeMode=filesystem
+
+
+# Homework 21 (CNI)
 
 Документация Calico, кратко и системно излагая, хорошо описывает сетевую систему куба, сервисы и BPF.  
 https://docs.projectcalico.org/about/about-k8s-networking
