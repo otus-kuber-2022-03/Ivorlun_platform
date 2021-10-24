@@ -785,9 +785,11 @@ You can store secrets in the Kubernetes API and mount them as files for use by p
 * Динамического provisioning
 
 ## StatefulSet
-Поды в StatefulSet относятся к "питомцам", а не "стаду", поэтому:
+PODы в StatefulSet отличаются от других нагрузок:
 * Каждый под имеет уникальное состояние (имя, сетевой адрес и volume-ы)
 * Для каждого pod-а создается отдельный PVC
+* Volume-ы для подов должны создаваться через PersistentVolume
+* Удаление/масштабирование подов не удаляет тома, связанные с ними
 ## Homework part  
 
 ### MinIO StatefulSet
