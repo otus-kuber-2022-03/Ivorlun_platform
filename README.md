@@ -402,10 +402,50 @@ Members:
 10.100.114.194,tcp:8000
 ```
 
+#### Snippet for cleaning rules and creating route  
+```
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+  sed -e "s/mode: \"\"/mode: \"ipvs\"/" | \
+  kubectl apply -f - -n kube-system
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+  sed -e "s/strictARP: false/strictARP: true/" | \
+  kubectl apply -f - -n kube-system
+
+kubectl --namespace kube-system delete pod --selector='k8s-app=kube-proxy'
+
+minikube ssh "sudo -i"
+sed -i "s/nameserver 192.168.49.1/nameserver 192.168.49.1\nnameserver 1.1.1.1/g" /etc/resolv.conf > /etc/resolv.conf.new
+mv /etc/resolv.conf.new /etc/resolv.conf
+
+cat <<EOF >> /tmp/iptables.cleanup
+*nat
+-A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
+COMMIT
+*filter
+COMMIT
+*mangle
+COMMIT
+EOF
+iptables-restore /tmp/iptables.cleanup
+
+sudo ip route add 172.17.255.0/24 via 192.168.49.2
+```
+
 ### MetalLB  
 
 После зачистки правил и уничтожения куб прокси, почему-то накрылся DNS внутри minikube-а.  
 Но, может быть, из-за подключения к VPN-у, который переписал на хосте resolv.conf.
+
+В общем постоянная проблема в миникубе - приходится изменять внутри контейнера миникуба resolv или изменять cm coredns примерно так https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/#example-1:  
+```
+apiVersion: v1
+data:
+  stubDomains: |
+        {"abc.com" : ["1.2.3.4"], "my.cluster.local" : ["2.3.4.5"]}
+  upstreamNameservers: |
+        ["8.8.8.8", "8.8.4.4"]
+kind: ConfigMap
+```
 
 #### Share single ip for several services
 ```
@@ -436,7 +476,7 @@ ARP (address resolution protocol) используется для конверт
 #### Ingress headless service  
 Классная тема вязать ингресс на балансер 
 1. Создаём сервис типа LB, который балансирует 80 и 443 в namespace: ingress-nginx, перехватывая трафик ingress-контроллера, выбирая его по селектору
-1. Создаём сервис типа ClusterIP, но без clusterIP! (clusterIP: None), который выбирает приложение по селектору
+1. Создаём сервис типа ClusterIP, но без clusterIP! (clusterIP: None), который выбирает приложение по селектору https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
 1. Создаём ingress, который проксирует наше приложение, выбирая сервис ClusterIP по backend service name и port.
 
 Из этого получится - единая точка входа, которая балансируется с полными возможностями metallb и openresty nginx-а.  
@@ -457,7 +497,156 @@ spec:
 Похоже, что ингресс nginx-а не должен переписывать / и сдвигать контекст: т.е. если ингресс имеет endpoint вида
 https://ingress/web/index.html, то он не может, просто убрав префикс, заммапить запрос в контейнер, в котором в location / лежит index.html и работает по урлу https://endpoint/index.html. 
 
+В общем получилось исправить следующей конфигурацией, наподобие примеру https://github.com/kubernetes/ingress-nginx/blob/main/docs/examples/rewrite/README.md#rewrite-target:  
 
+```
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /web(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: web-svc
+            port:
+              number: 80
+
+```
+Суть связки в том, что ЛБ даёт возможность получить доступ извне внутрь кластера и резервирует для этого адрес, а ingress позволяет разделить доступ к разным сервисам, например, по контекстному пути.  
+Т.е. если удалить ингресс выше, то доступ к сервису пропадёт, несмотря на то, что балансировщик будет работать:  
+```
+❯ k delete -f ../web-ingress.yaml 
+ingress.networking.k8s.io "web" deleted
+$ 
+❯ curl -k https://172.17.255.2/web/index.html
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+```
+### Kuber Dashboard context ingress
+Дашборд легко привязался к тому же ингрессу и его эндпоинту, однако важны были аннотации:
+```
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+```
+Так как первая переключала протокол на безопасный, а **rewrite-target: /$1 позволяла не конфликтовать с существующим префиксом для другого сервиса** - т.е. на одном бэкенде $1, на другом - $2.
+
+### Canary Ingress и как взаимодействуют компоненты при использовании ingress и MetalLB 
+Итого важный момент, как это всё взаимодействует в конкретном примере и в принципе.  
+
+Существуют 2 deployment-а в namespace default:
+* web - 3 replicas
+* web-canary - 2 replicas
+
+Существуют для каждого из них headless ClusterIP service-ы, которые по селектору `label=web` или `label=web-canary` выбирают на какую группу подов обращаться.
+* web-svc
+* web-canary-svc
+
+Для того, чтобы сделать содержание их index.html доступным по контексту `/web/` (т.е. http://address/web/index.html) используются для каждого ingress-ы, то есть правила маршрутизации трафика извне, в данном случае, на сервисы ClusterIP.  
+* web
+* web-canary
+
+Причём, ingress canary включается только при наличии в запросе header-а `canary=forsure`:  
+```
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$3
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-by-header: "canary"
+    nginx.ingress.kubernetes.io/canary-by-header-value: "forsure"
+```
+
+Наконец, есть сервис типа load balancer (то есть metallb, настоящий L4-балансировщик, установленный как отдельный контроллер - 172.17.255.2), который связан с классом ingress-nginx
+```
+...
+kind: Service
+spec:
+  externalTrafficPolicy: Local
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/component: controller
+...
+```
+и, связывающий все обращения на него, с правилами ingress-ов, которые используют `ingressClassName: nginx`.
+
+То есть, все обращения вида `curl http(s)://172.17.255.2/*` физически попадают на балансировщик, а дальше маршрутизируются согласно правилам ingress-ов на целевые бэкенды.  
+
+В данном примере, все запросы, которые имеют header `canary=forsure`, перенаправляются на поды canary, а те, которые не имеют, на предыдущие.
+```
+❯ curl -k https://172.17.255.2/web/index.html | tail
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 83783    0 83783    0     0  4812k      0 --:--:-- --:--:-- --:--:-- 5113k
+<pre># Kubernetes-managed hosts file.
+127.0.0.1	localhost
+::1	localhost ip6-localhost ip6-loopback
+fe00::0	ip6-localnet
+fe00::0	ip6-mcastprefix
+fe00::1	ip6-allnodes
+fe00::2	ip6-allrouters
+172.17.0.3	web-59c5c547b7-q87sq</pre>
+</body>
+</html>
+ 
+❯ curl -k -H "canary: forsure" https://172.17.255.2/web/index.html | tail
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 83811    0 83811    0     0  5456k      0 --:--:-- --:--:-- --:--:-- 5456k
+<pre># Kubernetes-managed hosts file.
+127.0.0.1	localhost
+::1	localhost ip6-localhost ip6-loopback
+fe00::0	ip6-localnet
+fe00::0	ip6-mcastprefix
+fe00::1	ip6-allnodes
+fe00::2	ip6-allrouters
+172.17.0.11	web-canary-54cdcc6d8-xd85x</pre>
+</body>
+</html>
+```
+
+#### Полезные варианты работы с Canary-аннотациями
+
+Дальше, выбор ограничивается только параметрами запросов - крутой вариант использования, например по языкам или странам:  
+
+```
+    nginx.ingress.kubernetes.io/canary-by-header: "Region"
+    nginx.ingress.kubernetes.io/canary-by-header-pattern: "cd|sz"
+```
+Как предлагают тут - https://intl.cloud.tencent.com/document/product/457/38413.  
+
+Возможны и другие аннотации, помимо header-ов:  
+https://github.com/kubernetes/ingress-nginx/blob/main/docs/user-guide/nginx-configuration/annotations.md#canary  
+
+Более того самые полезные, имхо, `nginx.ingress.kubernetes.io/canary-weight: "10"`, так как они позволяют без изменения запросов просто бесшовно 10% траффика перенаправлять на выбранную группу подов.
+https://mcs.mail.ru/help/ru_RU/cases-bestpractive/k8s-canary  
+https://v2-1.docs.kubesphere.io/docs/quick-start/ingress-canary/
+
+### Полезные ссылки
+Инструмент автоматизации развёртывания приложений в кубере  и его пример работы с canary и ингрессом:
+https://docs.flagger.app/tutorials/nginx-progressive-delivery
+
+```
+Flagger implements several deployment strategies (Canary releases, A/B testing, Blue/Green mirroring) using a service mesh (App Mesh, Istio, Linkerd, Open Service Mesh) or an ingress controller (Contour, Gloo, NGINX, Skipper, Traefik) for traffic routing. For release analysis, Flagger can query Prometheus, Datadog, New Relic, CloudWatch or Graphite and for alerting it uses Slack, MS Teams, Discord and Rocket.
+```
+
+
+Примеры работы с ингрессом и сервис для тестов
+
+https://github.com/kubernetes/ingress-nginx/blob/main/docs/examples/http-svc.yaml
 
 ### Homework CNI
 
