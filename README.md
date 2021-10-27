@@ -658,8 +658,30 @@ Volume-ы решают обе проблемы.
 * Volume создается и удаляется вместе с подом
 * Один и тот же Volume может использоваться одновременно несколькими контейнерами в поде
 Далее все volumes делятся на 2 вида - volume и persistent.
+
+### subPath
+Можно один и тот же вольюм в двух контейнерах, но при этом разбивать его на поддиректории.  
+Например все данные приложения для бэкапа хранить в одном вольюме, но по разным маунтпоинтам и путям:  
+```
+
+      image: mysql
+      env:
+      - name: MYSQL_ROOT_PASSWORD
+        value: "rootpasswd"
+      volumeMounts:
+      - mountPath: /var/lib/mysql
+        name: site-data
+        subPath: mysql
+    - name: php
+      image: php:7.0-apache
+      volumeMounts:
+      - mountPath: /var/www/html
+        name: site-data
+        subPath: html
+```
 ### Volume types  
 Их целое множество - cephfs volume, azureFile CSI migration, glusterfs, iscsi, etc.  
+Kubernetes supports two volumeModes of PersistentVolumes: Filesystem and Block
 #### emptyDir
 * Существует пока под запущен
 * Изначально пустой каталог на хосте
@@ -710,6 +732,26 @@ A projected volume maps several existing volume sources into the same directory.
                 resource: limits.cpu
 ```
 Together, these two ways of exposing Pod and Container fields are called the Downward API.
+### local
+PV являющийся примонтированным локальным хранилищем - директорией, разделом или диском.
+Не поддерживает динамический провижининг.  
+Лучше, чем hostpath, так как не нужно явно указывать привзяку подов к ноде - система сама знает куда его назначить.  
+То есть это более надёжное и гибкое решение, однако, ограниченное тем, что диск физически привязан к хосту ноды и поломка ноды означает поломку работы пода.  
+
+## Out-of-tree volume plugins
+Всё это, конечно, не полный список, а с помощью  Container Storage Interface (CSI) и FlexVolume кто угодно может создавать плагины для хранилищ без необходимости менять код кубера.  
+
+## Container Storage Interface (CSI) 
+
+Defines a standard interface for container orchestration systems (like Kubernetes) to expose arbitrary storage systems to their container workloads.
+Once a CSI compatible volume driver is deployed on a Kubernetes cluster, users may use the csi volume type to attach or mount the volumes exposed by the CSI driver.
+
+A csi volume can be used in a Pod in three different ways:
+
+* through a reference to a PersistentVolumeClaim
+* with a generic ephemeral volume (alpha feature)
+* with a CSI ephemeral volume if the driver supports that (beta feature)
+
 ## Persistent Volumes
 * Создаются на уровне кластера
 * PV похожи на обычные Volume, но имеют отдельный от сервисов жизненный цикл  
@@ -737,18 +779,31 @@ spec:
       persistentVolumeClaim:
         claimName: myclaim
 ```
+### Expanding Persistent Volumes Claims  
+Поддержка авторасширения pvc доступна с 1.11 и включена по умолчанию, но работает далеко не со всеми storage class.  
+You can only expand a PVC if its storage class's allowVolumeExpansion field is set to true.
+### CSI Volume expansion  
+То же доступно и для CSI - должно поддерживаться целевым драйвером.  
+You can only resize volumes containing a file system if the file system is XFS, Ext3, or Ext4.  
+
+### PVC & PV lifecycle
+Provisioning > binding > using  
+Provisioning - статический (выдали все pv заранее и pvc привязывается к существующим) и динамический (реализуется через default storage class - по запросу pvc кластер сам создаёт необходимый PV под его запрос)  
+Для следующих этапов есть разные инструменты защиты от переиспользования и перезаписи.  
+
 ### PV Reclaiming 
 PV может иметь несколько разных политик переиспользования ресурсов хранилища:
 * **Retain** - после удаления PVC, PV переходит в состояние “released”, чтобы переиспользовать ресурс, администратор должен вручную удалить PV, освободить место во внешнем хранилище (удалить данные или сделать их резервную копию)
 * **Delete** - (плагин должен поддерживать эту политику) PV удаляется вместе с PVC и высвобождается ресурс во внешнем хранилище
-* **Recycle** (deprecated) - удаляет все содержимое PV и делает его доступным для использования 
+* **Recycle** (deprecated в пользу dynamic provisioning-а) - удаляет все содержимое PV и делает его доступным для использования 
 
 ### PV Access Modes
 Тома монтируются к кластеру с помощью различных провайдеров, они имеют различные разрешения доступа чтения/записи, PV дает общие для всех провайдеров режимы.  
 PV монтируется на хост с одним их трех режимов доступа:  
-* **ReadWriteOnce** - **RWO** - только один узел может монтировать том для чтения и записи
+* **ReadWriteOnce** - **RWO** - только один узел может монтировать том для чтения и записи. ReadWriteOnce может предоставлять доступ нескольким подам, если они запущены на одной node-е.
 * **ReadOnlyMany** - **ROX** - несколько узлов могут монтировать том для чтения
 * **ReadWriteMany** - **RWX** - несколько узлов могут монтировать том для чтения и записи
+* **ReadWriteOncePod** - **RWOP** - Только для единственного pod-а в рамках всего кластера. Поддержка только для CSI k8s 1.22+
 
 ### ConfigMap & Secret
 
@@ -774,15 +829,24 @@ You can store secrets in the Kubernetes API and mount them as files for use by p
 4. Кубер находит подходящий под PVC PV
 5. Создаётся POD с volume-ом, который ссылается на PVC
 
+Кстати надо будет руками потом подчищать ненужные PV - это место на всякий случай навсегда занимается.
 ### В какой момент происходит монтирование
 1. Kubernetes монтирует сетевой диск на ноду
 2. Runtime пробрасывает том в контейнер
 
-## Storage Classes
+## The StorageClass Resource
 Описание "классов" различных систем хранения
 Разные классы могут использоваться для:
 * Произвольных политик (например переиспользования?)
 * Динамического provisioning
+
+У каждого StorageClass есть provisioner, который определяет какой плагин используется для работы с PVs. 
+
+### Provisioner  
+Для того, чтобы storage class мог физически управлять выданным ему хранилищем существует Provisioner - т.е. код, который непосредственно отправляет ему вызовы.  
+
+#### Resizing a volume containing a file system
+You can only resize volumes containing a file system if the file system is XFS, Ext3, or Ext4 in RWX.
 
 ## StatefulSet
 PODы в StatefulSet отличаются от других нагрузок:
@@ -815,7 +879,7 @@ LAST SEEN   TYPE     REASON                  OBJECT                             
 
 То есть порядок действий следующий:  
 * Создаётся statefulset с MinIO, у которого есть просто volume, в котором он будет хранить данные
-* Вместе с ним создаётся RWO volumeClaim, который запрашивает (видимо у какого-то плагина в кластере?) квоту на pv со storageClass=standard и volumeMode=filesystem
+* Вместе с ним создаётся RWO volumeClaim, который запрашивает (видимо у какого-то плагина в кластере?) квоту на pv со storageClass=standard и volumeMode=filesystem, т.е. дефолтные значения  
 
 
 # Homework 21 (CNI)
@@ -828,4 +892,18 @@ There are lots of different kinds of CNI plugins, but the two main ones are:
   * IPAM (IP Address Management) plugins, which are responsible for allocating pod IP addresses.
 Both options can be provided simultaneously.
 
+# Homework 22 (CSI)  
 
+Вообще у CSI куча преимуществ против стандартных PV.
+
+### Volume Snapshot and Restore  
+A VolumeSnapshot**Content** is a snapshot taken from a volume in the cluster that has been provisioned by an administrator. It is a resource in the cluster just like a PersistentVolume is a cluster resource.
+
+A VolumeSnapshot is a request for snapshot of a volume by a user. It is similar to a PersistentVolumeClaim.  
+
+Volume snapshots provide Kubernetes users with a standardized way to copy a volume's contents at a particular point in time without creating an entirely new volume. 
+### Volume Cloning
+The CSI Volume Cloning feature adds support for specifying existing PVCs in the dataSource field to indicate a user would like to clone a Volume.  
+### Volume populators and data sources  
+Штука, которая заполняет данными PV из другого PV?  
+Volume populators are controllers that can create non-empty volumes, where the contents of the volume are determined by a Custom Resource. Users create a populated volume by referring to a Custom Resource using the dataSourceRef field
