@@ -845,6 +845,10 @@ You can store secrets in the Kubernetes API and mount them as files for use by p
 ### Provisioner  
 Для того, чтобы storage class мог физически управлять выданным ему хранилищем существует Provisioner - т.е. код, который непосредственно отправляет ему вызовы.  
 
+### Dynamic Volume Provisioning
+Dynamic volume provisioning allows storage volumes to be created on-demand.  
+The implementation of dynamic volume provisioning is based on the API object StorageClass from the API group storage.k8s.io.  
+A cluster administrator can define as many StorageClass objects as needed, each specifying a volume plugin (aka provisioner) that provisions a volume and the set of parameters to pass to that provisioner when provisioning.
 #### Resizing a volume containing a file system
 You can only resize volumes containing a file system if the file system is XFS, Ext3, or Ext4 in RWX.
 
@@ -879,8 +883,61 @@ LAST SEEN   TYPE     REASON                  OBJECT                             
 
 То есть порядок действий следующий:  
 * Создаётся statefulset с MinIO, у которого есть просто volume, в котором он будет хранить данные
-* Вместе с ним создаётся RWO volumeClaim, который запрашивает (видимо у какого-то плагина в кластере?) квоту на pv со storageClass=standard и volumeMode=filesystem, т.е. дефолтные значения  
+* Вместе с ним создаётся RWO volumeClaim, который запрашивает у дефолтного storage class квоту на pv со storageClass=standard и volumeMode=filesystem, т.е. дефолтные значения  
+* А всё потому что в kind-е по умолчанию установлен rancher/local-path-provisioner в одноимённом ns.  
+То есть он выдаёт на каждый PVC PV, выделяя целиком (тк лимиты пока игнорирует) `hostPath` диск динамически - очень удобная штука в случае использованя bare-metal и отсутствия network storage.
 
+## Secret  
+
+Данные для секретов записываются в 2х форматах - `data` и `stringData`.  
+data - base64 encoded.  
+
+
+| Builtin Type | Usage |
+| --- | --- |
+| Opaque (Generic)                      | arbitrary user-defined data |
+| kubernetes.io/service-account-token   | service account token |
+| kubernetes.io/dockercfg               | serialized ~/.dockercfg file |
+| kubernetes.io/dockerconfigjson        | serialized ~/.docker/config.json file |
+| kubernetes.io/basic-auth              | credentials for basic authentication |
+| kubernetes.io/ssh-auth                | credentials for SSH authentication |
+| kubernetes.io/tls                     | data for a TLS client or server |
+| bootstrap.kubernetes.io/token         | bootstrap token data |
+
+Secrets могут быть примонтированы как data volumes или как environment variables, чтобы исользоваться контейнером в Pod.  
+
+### Immutable Secrets 
+    * protects you from accidental (or unwanted) updates that could cause applications outages
+    * improves performance of your cluster by significantly reducing load on kube-apiserver, by closing watches for secrets marked as immutable.
+
+### Risks
+  * In the API server, secret data is stored in etcd; therefore:
+    * Administrators should enable encryption at rest for cluster data (requires v1.13 or later).
+    * Administrators should limit access to etcd to admin users.
+    * Administrators may want to wipe/shred disks used by etcd when no longer in use.
+    * If running etcd in a cluster, administrators should make sure to use SSL/TLS for etcd peer-to-peer communication.
+  * If you configure the secret through a manifest (JSON or YAML) file which has the secret data encoded as base64, sharing this file or checking it in to a source repository means the secret is compromised. Base64 encoding is not an encryption method and is considered the same as plain text.
+  * Applications still need to protect the value of secret after reading it from the volume, such as not accidentally logging it or transmitting it to an untrusted party.
+  * A user who can create a Pod that uses a secret can also see the value of that secret. Even if the API server policy does not allow that user to read the Secret, the user could run a Pod which exposes the secret.
+
+
+В общем base64 - это норм, если хочется скрыть от беглого взгляда, но в идеале, лучше шифровать.  
+
+Примечательно, что директория, в которой находятся загруженные в бакет файлы, находится буквально за 2 команды:  
+```
+❯ k describe pv | grep Path
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/local-path-provisioner/pvc-f3a65b28-a1ba-4b83-a109-22326015c61f_default_data-minio-0
+```
+и переходя в контейнер kind-а:  
+```
+root@kind-control-plane:~# ls -lahF /var/local-path-provisioner/pvc-f3a65b28-a1ba-4b83-a109-22326015c61f_default_data-minio-0
+total 16K
+drwxrwxrwx 4 root root 4.0K Oct 28 23:04 ./
+drwxr-xr-x 3 root root 4.0K Oct 24 15:07 ../
+drwxr-xr-x 6 root root 4.0K Oct 28 23:04 .minio.sys/
+drwxr-xr-x 2 root root 4.0K Oct 28 23:04 123/
+```
 
 # Homework 21 (CNI)
 
@@ -907,3 +964,7 @@ The CSI Volume Cloning feature adds support for specifying existing PVCs in the 
 ### Volume populators and data sources  
 Штука, которая заполняет данными PV из другого PV?  
 Volume populators are controllers that can create non-empty volumes, where the contents of the volume are determined by a Custom Resource. Users create a populated volume by referring to a Custom Resource using the dataSourceRef field
+
+### Volume Health Monitoring
+
+CSI volume health monitoring allows CSI Drivers to detect abnormal volume conditions from the underlying storage systems and report them as events on PVCs or Pods.
