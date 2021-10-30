@@ -904,7 +904,7 @@ data - base64 encoded.
 | kubernetes.io/tls                     | data for a TLS client or server |
 | bootstrap.kubernetes.io/token         | bootstrap token data |
 
-Secrets могут быть примонтированы как data volumes или как environment variables, чтобы исользоваться контейнером в Pod.  
+Secrets могут быть примонтированы как data volumes или как environment variables, чтобы использоваться контейнером в Pod.  
 
 ### Immutable Secrets 
     * protects you from accidental (or unwanted) updates that could cause applications outages
@@ -938,17 +938,6 @@ drwxr-xr-x 3 root root 4.0K Oct 24 15:07 ../
 drwxr-xr-x 6 root root 4.0K Oct 28 23:04 .minio.sys/
 drwxr-xr-x 2 root root 4.0K Oct 28 23:04 123/
 ```
-
-# Homework 21 (CNI)
-
-Документация Calico, кратко и системно излагая, хорошо описывает сетевую систему куба, сервисы и BPF.  
-https://docs.projectcalico.org/about/about-k8s-networking
-
-There are lots of different kinds of CNI plugins, but the two main ones are:
-  * network plugins, which are responsible for connecting pod to the network
-  * IPAM (IP Address Management) plugins, which are responsible for allocating pod IP addresses.
-Both options can be provided simultaneously.
-
 # Homework 7 (Templating and helm)
 
 ## Helm  
@@ -1039,6 +1028,50 @@ releases:
 ...
     - ./values/{{`{{ .Release.Name }}`}}.yaml.gotmpl
 ```
+## Jsonnet
+
+* Продукт от Google
+* Расширение JSON (как YAML - нужно помнить, что любой json представим в виде yaml)
+* Любой валидный JSON - валидный Jsonnet (как YAML)
+* Полноценный язык программирования* (заточенный под шаблонизацию) (не как YAML)
+
+### Зачем (в большинстве - незачем)
+
+* Для генерации и применения манифестов множества однотипных ресурсов, отличающихся несколькими параметрами
+* Если есть ненависть к YAML, многострочным портянкам на YAML и отступам в YAML
+* Для генерации YAML и передачи его в другие утилиты (например - kubectl):
+* `kubecfg show workers.jsonnet | kubectl apply -f -`
+
+### Kubecfg  
+Самый лучший на данный момент тул для работы с Jsonnet-ом  
+Общий workﬂow следующий: 
+1. Импортируем подготовленную библиотеку с описанием ресурсов
+1. Пишем общий для сервисов шаблон
+1. Наследуемся от шаблона, указывая конкретные параметры
+
+## Kustomize
+
+* Поддержка встроена в kubectl
+* Кастомизация готовых манифестов
+* Все больше приложений начинают использовать kustomize как альтернативный вариант поставки (istio, nginx-ingress, etc...)
+* Почти как Jsonnet, только YAML (но kustomize - это не templating)
+* Нет параметризации при вызове, но можно делать так: `kustomize edit set image ...`
+
+### Общая логика работы:
+1. Создаем базовые манифесты ресурсов
+1. Создаем файл kustomization.yaml с описанием общих значений
+1. Кастомизируем манифесты и применяем их (Можно делать как на лету, так и по очереди)
+1. Отлично подходит для labels , environment variables и много чего еще
+
+# Homework 21 (CNI)
+
+Документация Calico, кратко и системно излагая, хорошо описывает сетевую систему куба, сервисы и BPF.  
+https://docs.projectcalico.org/about/about-k8s-networking
+
+There are lots of different kinds of CNI plugins, but the two main ones are:
+  * network plugins, which are responsible for connecting pod to the network
+  * IPAM (IP Address Management) plugins, which are responsible for allocating pod IP addresses.
+Both options can be provided simultaneously.
 
 # Homework 22 (CSI)  
 
