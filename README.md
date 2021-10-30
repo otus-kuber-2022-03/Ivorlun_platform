@@ -647,7 +647,7 @@ Flagger implements several deployment strategies (Canary releases, A/B testing, 
 
 https://github.com/kubernetes/ingress-nginx/blob/main/docs/examples/http-svc.yaml
 
-# Homework 21 (Volumes and Storages)
+# Homework 6 (Volumes and Storages)
 
 ## Synopsis  
 Данные внутри контейнеров и подов эфемерны, поэтому, чтобы они сохранялись между перезапусками, используется механизм volume-ов, как в docker-е.   
@@ -948,6 +948,97 @@ There are lots of different kinds of CNI plugins, but the two main ones are:
   * network plugins, which are responsible for connecting pod to the network
   * IPAM (IP Address Management) plugins, which are responsible for allocating pod IP addresses.
 Both options can be provided simultaneously.
+
+# Homework 7 (Templating and helm)
+
+## Helm  
+Возможности  
+* Упаковка нескольких манифестов Kubernetes в пакет - Chart
+* Установка пакета в Kubernetes (установленный Chart называется Release)
+* Шаблонизация во время установки пакета
+* Upgrade (обновления) и Rollback (откаты) установленных пакетов
+* Управление зависимостями между пакетами
+* Xранение пакетов в удаленных репозиториях
+
+```
+example/ 
+  Chart.yaml         # описание пакета 
+  README.md 
+  requirements.yaml  # список зависимостей 
+  values.yaml        # переменные
+  charts/            # загруженные зависимости 
+  templates/         # шаблоны описания ресурсов Kubernetes
+```
+### Встрооенные переменные
+
+* Release - информация об устанавливаемом release
+* Chart - информация о chart, из которого происходит установка
+* Files - возможность загружать в шаблон данные из файлов (например, в
+* configMap )
+* Capabilities - информация о возможностях кластера (например, версия
+* Kubernetes)
+* Templates - информация о манифесте, из которого был создан ресурс
+
+### Циклы, условия и функции
+В основе Helm лежит шаблонизатор Go с 50+ встроенными функциями.  
+Например.  
+Условия:
+``` 
+{{- if .Values.server.persistentVolume.enabled }} 
+    persistentVolumeClaim: 
+      ... 
+{{- else }}
+```
+Циклы:
+```
+{{- range $key, $value := .Values.server.annotations }} 
+  {{ $key: }} {{ $value }} 
+{{- end }}
+```
+### Hooks
+Определенные действия, выполняемые в различные моменты
+жизненного цикла поставки. Hook, как правило, запускает Job (но это не
+обязательно).
+Виды hooks:
+* `pre/post-install`
+* `pre/post-delete`
+* `pre/post-upgrade`
+* `pre/post-rollback`
+
+### Helm Secrets
+* Плагин для Helm
+* Механизм удобного* хранения и деплоя секретов для тех, у кого нет HashiCorp Vault
+* Реализован поверх другого решения - Mozilla Sops
+* Возможность сохранить структуру зашифрованного файла (YAML, JSON)
+* Поддержка PGP и KMS (AWS, GCP)
+
+### Best practices  
+* Указывайте все используемые в шаблонах переменные в values.yaml, выбирайте адекватные значения по умолчанию
+* Используйте команду helm create для генерации структуры своего chart
+* Пользуйтесь плагином helm docs для документирования своего chart
+
+https://helm.sh/docs/chart_best_practices/
+
+## Helmfile  
+* Надстройка над helm - шаблонизатор шаблонизатора.  
+* Управление развертыванием нескольких Helm Charts на нескольких окружениях
+* Возможность устанавливать Helm Charts в необходимом порядке
+* Больше шаблонизации, в том числе и в values.yaml
+* Поддержка различных плагинов (helm-tiller, helm-secret, helm-diﬀ)
+* Главное - не увлечься шаблонизацией и сохранять прозрачность решения
+```
+releases:
+- name: prometheus-operator
+  chart: stable/prometheus-operator
+  version: 6.11.0
+  <<: *template
+- name: prometheus-telegram-bot
+  chart: express42/prometheus-telegram-bot
+  version: 0.0.1
+  <<: *template
+...
+    - ./values/{{`{{ .Release.Name }}`}}.yaml.gotmpl
+```
 
 # Homework 22 (CSI)  
 
