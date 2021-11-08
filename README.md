@@ -968,6 +968,8 @@ example/
 * Kubernetes)
 * Templates - информация о манифесте, из которого был создан ресурс
 
+### Использование публичных чартов, но своих переменных  
+`helm install chartmuseum chartmuseum/chartmuseum -f kubernetes-templating/chartmuseum/values.yaml --namespace=chartmuseum --create-namespace`
 ### Циклы, условия и функции
 В основе Helm лежит шаблонизатор Go с 50+ встроенными функциями.  
 Например.  
@@ -1066,6 +1068,114 @@ releases:
 ## cert-manager  
 Интересный инструмент, позволяющий автоматизировать работу с сертификатами.  
 Причём провайдерами могут выступать как Let’s Encrypt, HashiCorp Vault и Venafi, так и private PKI.  
+
+Туториал для LetsEncrypt + Ingress-Nginx https://cert-manager.io/docs/tutorials/acme/ingress/
+
+Для отладки используется великолепное приложение kuard, которое позволяет получить исчёрпывающую инфу о кластере и работе сети - https://github.com/kubernetes-up-and-running/kuard
+
+Для того, чтобы с помощью let's encrypt-а можно было получить сертификат, нужно выполнить следующее:  
+
+1. Иметь в кластере ingress-контроллер (простейший пример - helm nginx)
+2. Установить в кластер сам cert-manager
+3. Иметь публичное (доступное для LE) доменное имя или зону, которая будет подтверждать сертификат - пришлось в GCP зарегать google domains
+4. Создать ingress для целевого сервиса, в котором будут аннотации на эмитента сертификата и блок с секретом tls:  
+
+```
+  annotations:
+    kubernetes.io/ingress.class: "nginx"    
+    #cert-manager.io/issuer: "letsencrypt-staging"
+spec:
+  tls:
+  - hosts:
+    - example.example.com
+    secretName: quickstart-example-tls
+```
+5. Дальше работа идёт с 2мя видами эмитентов LE - staging и prod, потому что можно легко выйти за лимиты попыток подтверждения сертификатов у LE и нужно сначала протестировать корректность всей связки.  
+
+Создаётся 
+```
+   apiVersion: cert-manager.io/v1
+   kind: Issuer
+   metadata:
+     name: letsencrypt-prod
+```
+через который на ингресс и делается фактический запрос у LE.  
+
+6. Deploy a TLS Ingress Resource
+
+Если выполнены все требования, то можно делать запрос на TLS сертификат.  
+Для этого существуют 2 способа:  
+1. Аннотации в ingress через ingress-shim
+2. Прямое создание ресурса сертификата  
+
+Проще первый путь, так как простое раскомментирование строки `#cert-manager.io/issuer: "letsencrypt-staging"` позволяет cert-manager
+* Создать автоматом сертификат
+* Создаст или изменит ingress чтобы использовать его для подтверждения домена (что обычно в html/.well-known/token.html)
+* Подтвердить домен
+* После того как домен подтверждён и выдан, cert-manager создаст и/или обновит секрет в сертификате
+
+Проверяем состояние выдачи `kubectl describe certificate quickstart-example-tls` и сам секрет серта `kubectl describe secret quickstart-example-tls`  
+
+## ChartMuseum (upload and install chart package)
+
+Для того, чтобы включить загрузку с помощью логина и пароля:  
+```
+env:
+  open:
+  DISABLE_API: false
+  secret:
+    # username for basic http authentication
+    BASIC_AUTH_USER:user
+    # password for basic http authentication
+    BASIC_AUTH_PASS:password
+```
+
+Docs - https://chartmuseum.com/docs/#uploading-a-chart-package
+
+### Создание чарта 
+Осуществляется командой Helm:
+```
+cd mychart/
+helm package .
+```
+Также можно загрузить уже готовый чарт для prometheus-оператора:  
+```
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm pull prometheus-community/kube-prometheus-stack -d ./
+```
+После этого появится файл `kube-prometheus-stack-19.2.3.tgz`
+
+### Загрузка
+
+Осуществляется командой:
+`curl -u user:password --data-binary "@kube-prometheus-stack-19.2.3.tgz" https://chartmuseum.34.88.82.193.nip.io/api/charts`  
+
+Если же пакет подписан и для него существует provenance file, нужно его загрузить рядом:
+`curl -u user:password --data-binary "@kube-prometheus-stack-19.2.3.tgz.prov" https://chartmuseum.34.88.82.193.nip.io/api/prov`  
+
+Можно загрузить одновременно оба файла используя /api/charts и multipart/form-data тип:
+`curl -u user:password -F "chart=@kube-prometheus-stack-19.2.3.tgz" -F "prov=@kube-prometheus-stack-19.2.3.tgz.prov" https://chartmuseum.34.88.82.193.nip.io/api/charts`  
+
+Но можно использовать просто helm-push:
+
+`helm push mychart/ chartmuseum`
+
+### Установка чарта в k8s:  
+Add the URL to your ChartMuseum installation to the local repository list:
+
+```
+helm repo add chartmuseum-nip https://chartmuseum.34.88.82.193.nip.io --username=user --password=password
+"chartmuseum-nip" has been added to your repositories
+```
+После этого выполняется поиск по чартам музея:  
+
+`helm search repo chartmuseum-nip`
+
+Выбирается нужный и устанавливается:
+`helm install chartmuseum-nip/kube-prometheus-stack`
+
+## Harbor
 
 
 # Homework 21 (CNI)
