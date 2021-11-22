@@ -1177,6 +1177,28 @@ helm repo add chartmuseum-nip https://chartmuseum.34.88.82.193.nip.io --username
 
 ## Harbor
 
+После того, как в кластере развёрнут ingress-nginx и cert-manager через helm, деплоим issuer для автогенерации сертов.  
+
+Далее проходим шаги по установке самого harbor    
+https://github.com/goharbor/harbor-helm/tree/v1.1.2#installation  
+
+Однако в процессе деплоя выясняется, что харбор пытается подтянуть secret ca, который не генериться cert-manager-ом: 
+
+```
+Events:
+  Type     Reason       Age                  From               Message
+  ----     ------       ----                 ----               -------
+  Normal   Scheduled    4m18s                default-scheduler  Successfully assigned harbor/harbor-harbor-core-c6f66f696-r5qck to gke-templating-default-pool-9ed53396-gxp5
+  Warning  FailedMount  2m15s                kubelet            Unable to attach or mount volumes: unmounted volumes=[ca-download], unattached volumes=[token-service-private-key ca-download psc kube-api-access-hpcjr config secret-key]: timed out waiting for the condition
+  Warning  FailedMount  8s (x10 over 4m18s)  kubelet            MountVolume.SetUp failed for volume "ca-download" : references non-existent secret key: ca.crt
+```
+
+Как описано в этой issue:  
+https://github.com/goharbor/harbor-helm/issues/229#issuecomment-788519847.  
+Решилось апдейтом на версию 1.5.4 и `expose.tls.certSource: secret`, как показывает влитый фикс выше.  
+
+
+
 
 # Homework 21 (CNI)
 
