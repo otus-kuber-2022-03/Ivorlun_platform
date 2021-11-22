@@ -1197,7 +1197,20 @@ Events:
 https://github.com/goharbor/harbor-helm/issues/229#issuecomment-788519847.  
 Решилось апдейтом на версию 1.5.4 и `expose.tls.certSource: secret`, как показывает влитый фикс выше.  
 
+Snippet for fast cluster config:  
 
+```
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx && helm repo update && helm install nginx-ingress ingress-nginx/ingress-nginx --namespace nginx-ingress --create-namespace
+helm repo add jetstack https://charts.jetstack.io && helm repo update && helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.6.0 --set installCRDs=true
+k apply -f kubernetes-templating/harbor/issuer.yaml
+helm repo add harbor https://helm.goharbor.io && helm repo update && helm install harbor harbor/harbor --wait --namespace=harbor --create-namespace -f kubernetes-templating/harbor/values.yaml --version v1.5.4
+```
+
+## Helmfile 
+
+https://github.com/roboll/helmfile/tree/v0.142.0#templating
+
+`docker run --rm --net=host -v "${HOME}/.kube:/root/.kube" -v "${HOME}/.config/helm:/root/.config/helm" -v "${PWD}:/wd" --workdir /wd quay.io/roboll/helmfile:helm3-v0.142.0 helmfile sync`
 
 
 # Homework 21 (CNI)
