@@ -1201,6 +1201,7 @@ Snippet for fast cluster config:
 
 ```
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx && helm repo update && helm install nginx-ingress ingress-nginx/ingress-nginx --namespace nginx-ingress --create-namespace
+k get -n nginx-ingress svc nginx-ingress-ingress-nginx-controller -o jsonpath="{.status.loadBalancer.ingress..ip}"
 helm repo add jetstack https://charts.jetstack.io && helm repo update && helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.6.0 --set installCRDs=true
 k apply -f kubernetes-templating/harbor/issuer.yaml
 helm repo add harbor https://helm.goharbor.io && helm repo update && helm install harbor harbor/harbor --wait --namespace=harbor --create-namespace -f kubernetes-templating/harbor/values.yaml --version v1.5.4
@@ -1208,10 +1209,17 @@ helm repo add harbor https://helm.goharbor.io && helm repo update && helm instal
 
 ## Helmfile 
 
-https://github.com/roboll/helmfile/tree/v0.142.0#templating
+* Докуметация:  https://github.com/roboll/helmfile/tree/v0.142.0
+* Best practices: https://github.com/roboll/helmfile/blob/master/docs/writing-helmfile.md
+
+Если положить манифест в директорию и директорию указать как чарт, то можно с помощью хелмфайла накатывать одиночные манифесты:  
+https://github.com/roboll/helmfile/pull/673
+
+Интересно, что в качестве источника хелм чарта можно использовать даже гит с указанием ветки
 
 `docker run --rm --net=host -v "${HOME}/.kube:/root/.kube" -v "${HOME}/.config/helm:/root/.config/helm" -v "${PWD}:/wd" --workdir /wd quay.io/roboll/helmfile:helm3-v0.142.0 helmfile sync`
 
+`helmfile apply`
 
 # Homework 21 (CNI)
 
