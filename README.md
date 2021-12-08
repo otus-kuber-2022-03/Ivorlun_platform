@@ -1221,6 +1221,63 @@ https://github.com/roboll/helmfile/pull/673
 
 `helmfile apply`
 
+## Helm 
+
+Chart - пакет, включающий
+* Метаданные
+* Шаблоны описания ресурсов Kubernetes
+* Конфигурация установки (values.yaml)
+* Документация
+* Список зависимостей
+
+Release
+* Установленный в Kubernetes Chart
+* Хранятся в configMaps и Secrets
+* Chart + Values = Release
+* 1 Upgrade = 1 Release
+
+A chart can be either an 'application' or a 'library' chart.
+* Application charts are a collection of templates that can be packaged into versioned archives to be deployed.
+* Library charts provide useful utilities or functions for the chart developer. They're included as a dependency of application charts to inject those utilities and functions into the rendering pipeline. Library charts do not define any templates and therefore cannot be deployed.
+
+Работает Helm 3 следующим образом:
+
+1. Получает на вход Chart (локально или из репозитория, при этом чарты могут использовать друг друга) и генерирует манифест релиза.
+1. Получает текст предыдущего релиза.
+1. Получает текущее стостояние примитивов из namespace-релиза.
+1. Сравнивает эти три вещи, делает patch и передает его в KubeAPI.
+1. Дожидается выката релиза (опциональный шаг).
+
+Эта схема называется 3-way merge. Таким образом Helm приведет конфигурацию приложения к состоянию, которое описано в git, но не тронет другие изменения. Т. е., если у вас в кластере есть какая-то сущность, которая трансформирует ваши примитивы (например, Service Mesh), то Helm отнесется к ним бережно.
+
+У чарта могут быть тесты - например connection test после установки.  
+А так же постинсталл инфа формируется через NOTES.txt
+
+“.” означает текущую область значений (current scope), далее идет зарезервированное слово Values и путь до ключа. При рендере релиза сюда подставится значение, которое было определено по этому пути.
+
+Следующая аннотация позволяет развертывать новые развертывания (Deployments) при изменении ConfigMap:
+```
+kind: Deployment
+spec:
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+```
+Отказ от удаления ресурсов с помощью политик ресурсов (PVC for example):
+```
+metadata:
+  annotations:
+    "helm.sh/resource-policy": keep
+```
+Плагин helm-secrets предлагает секретное управление и защиту вашей важной информации. Он делегирует секретное шифрование Mozilla SOPS
+
+Виды hooks:
+* pre/post-install
+* pre/post-delete
+* pre/post-upgrade
+* pre/post-rollback
+
 # Homework 21 (CNI)
 
 Документация Calico, кратко и системно излагая, хорошо описывает сетевую систему куба, сервисы и BPF.  
