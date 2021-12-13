@@ -1278,6 +1278,75 @@ metadata:
 * pre/post-upgrade
 * pre/post-rollback
 
+Для того, чтобы переопределить values для subchart-а необходимо в основном файле values прописать секцию с именем зависимости и в ней переопределить значения.
+### Создаем свой helm chart | Задание со ⭐  
+Реализовал задание с зависимостью не через requirements.yaml, а через dependencies, так как 1й вариант является устаревшим:  
+https://helm.sh/docs/faq/changes_since_helm2/#consolidation-of-requirementsyaml-into-chartyaml  
+> The apiVersion field should be v2 for Helm charts that require at least Helm 3. Charts supporting previous Helm versions have an apiVersion set to v1 and are still installable by Helm 3.
+
+> Changes from v1 to v2:
+> * A dependencies field defining chart dependencies, which were located in a separate requirements.yaml file for v1 charts (see Chart Dependencies).
+То есть в Chart.yaml объявляем:  
+```
+dependencies:
+  - name: frontend
+    version: 0.1.0
+    repository: "file://../frontend"
+  - name: redis
+    repository: https://charts.bitnami.com/bitnami
+    version: 15.6.4
+```
+Далее смотрим на манифест hipster-shop и https://artifacthub.io/packages/helm/bitnami/redis,  
+и переопределяем необходимые значения в values.yaml самого hipster-shop, чтобы чарт работал в связке с приложением.  
+```
+redis: 
+  fullnameOverride: "redis-cart"
+  nameOverride: "redis-cart"
+  commonLabels: 
+    app: "redis-cart"
+  architecture: "standalone"
+  auth:
+    enabled: false
+```
+Так как нет возможности изменить имя сервиса в values helm chart redis, а только его префикс, то в манифесте hipster-shop пришлось сменить:  
+`REDIS_ADDR` с `redis-cart` на `redis-cart-master`  
+
+## Helm Secrets (Mozilla SOPS with gpg)  
+Помимо PGP есть поддержка KMS (AWS, GCP) и реализует возможность сохранить структуру зашифрованного файла (YAML, JSON).  
+
+Для работы требуются утилиты GPG, Mozilla SOPS https://github.com/mozilla/sops и плагин helm-secrets https://github.com/jkroepke/helm-secrets.  
+Создаём ключ для подписи  
+`gpg --full-generate-key`  
+Создадим в корне директории чарта новый файл secrets.yaml со значениями, которые надо будет шифровать.  
+Шифруем его  
+`sops -e -i --pgp <$ID> secrets.yaml`  
+Можно посмотреть содержание через  
+`helm secrets view secrets.yaml` или `sops -d secrets.yaml`  
+Создаём secrets.yaml уже в директории templates и помещаем туда значения  
+```
+type: Opaque
+data:
+ visibleKey: {{ .Values.visibleKey | b64enc | quote }}
+```
+Далее можно работать через команду  
+`helm secrets upgrade --install`
+
+## "Sealed Secrets" for Kubernetes by bitnami 
+https://github.com/bitnami-labs/sealed-secrets  
+Encrypt your Secret into a SealedSecret, which is safe to store - even to a public repository. The SealedSecret can be decrypted only by the controller running in the target cluster and nobody else (not even the original author) is able to obtain the original Secret from the SealedSecret.
+
+### Предложите способ использования плагина helm-secrets в CI/CD  
+Простейшим способом кажется добавление gpg-ключа в secret variables или аналогичные системы.  
+Также можно записать ключ в образ, который будет производить работу с helm в CI.   
+
+helm repo add templating <Ссылка на ваш репозиторий> будет работать только после того как изменения попадут в мастер ветку.  
+
+## JSONnet Kubecfg (язык шаблонов для json)  
+Так как используемая в домашнем задании библиотека устарела и для деплоймента имела версию kube api apps/v1beta2, пришлось её обновить до коммита  
+https://github.com/bitnami-labs/kube-libsonnet/raw/96b30825c33b7286894c095be19b7b90687b1ede/kube.libsonnet  
+
+Позволяет делать шаблоны манифестов в виде json-шаблонов используя библиотеку для интерпретации, например - libsonnet.  
+
 # Homework 21 (CNI)
 
 Документация Calico, кратко и системно излагая, хорошо описывает сетевую систему куба, сервисы и BPF.  
