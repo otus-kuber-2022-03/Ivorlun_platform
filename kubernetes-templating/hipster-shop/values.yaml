@@ -1,0 +1,8 @@
+redis: 
+  fullnameOverride: "redis-cart"
+  nameOverride: "redis-cart"
+  commonLabels: 
+    app: "redis-cart"
+  architecture: "standalone"
+  auth:
+    enabled: false
