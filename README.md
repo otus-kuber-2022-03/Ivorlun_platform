@@ -1347,6 +1347,14 @@ https://github.com/bitnami-labs/kube-libsonnet/raw/96b30825c33b7286894c095be19b7
 
 Позволяет делать шаблоны манифестов в виде json-шаблонов используя библиотеку для интерпретации, например - libsonnet.  
 
+# Homework 6 (Operators)
+
+## CRD and CR
+
+## Operator
+
+
+
 # Homework 21 (CNI)
 
 Документация Calico, кратко и системно излагая, хорошо описывает сетевую систему куба, сервисы и BPF.  
